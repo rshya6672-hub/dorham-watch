@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b1a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>ببینیم</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#070b1a;--tx:#f4f6fb;--mu:#8b93a7}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--tx);font-family:Vazirmatn,Tahoma,sans-serif;min-height:100vh;padding:env(safe-area-inset-top) 16px 24px}
+.view{max-width:520px;margin:0 auto;padding-top:16px}
+h1{font-size:34px;font-weight:800;text-align:center;margin:36px 0 6px}
+.sub{color:var(--mu);text-align:center;margin-bottom:36px}
+.card{display:flex;align-items:center;gap:14px;width:100%;border:0;border-radius:28px;padding:22px;color:#fff;font:inherit;text-align:right;cursor:pointer;margin-bottom:14px}
+.card b{font-size:22px;display:block}.card small{opacity:.85}
+.ic{font-size:28px;background:rgba(255,255,255,.18);border-radius:18px;width:58px;height:58px;display:grid;place-items:center;flex:none}
+.or{background:linear-gradient(90deg,#d97706,#f59e0b)}.pu{background:linear-gradient(90deg,#6d28d9,#8b5cf6)}
+.gr{background:linear-gradient(#0d9f6e,#22b783)}.sl{background:linear-gradient(#3f4a5e,#5b6678)}.nv{background:#16294a}
+.half{display:grid;grid-template-columns:1fr 1fr;gap:14px}.half .card{flex-direction:column;align-items:flex-start;height:150px;justify-content:space-between}
+.back{background:none;border:0;color:var(--mu);font:inherit;cursor:pointer;padding:8px 0}
+input,select{width:100%;background:#111a33;border:1px solid #243256;border-radius:16px;padding:14px;color:var(--tx);font:inherit;margin:6px 0 12px}
+.btn{width:100%;border:0;border-radius:16px;padding:14px;background:#f59e0b;color:#1b1200;font:inherit;font-weight:700;cursor:pointer;margin-bottom:10px}
+.btn.alt{background:#243256;color:var(--tx)}
+.row{display:flex;justify-content:space-between;padding:12px 14px;background:#111a33;border-radius:14px;margin-bottom:8px}
+video{width:100%;border-radius:18px;background:#000;max-height:40vh}
+#chat{height:150px;overflow:auto;background:#111a33;border-radius:14px;padding:10px;margin:10px 0;font-size:14px}
+#chat p{margin-bottom:6px}#chat b{color:#f59e0b}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#243256;padding:12px 18px;border-radius:14px;display:none}
+.tag{background:#243256;border-radius:10px;padding:2px 10px;font-size:13px}
+</style>
+</head>
+<body>
+
+<section class="view" id="home">
+  <h1>🎬 ببینیم</h1><p class="sub">تماشای گروهی فیلم و موزیک</p>
+  <button class="card or" onclick="go('lobby')"><span class="ic">👥</span><span><b>ساخت / ورود به لابی</b><small>در مرحله بعد نوع لابی را انتخاب کن</small></span></button>
+  <button class="card pu" onclick="loadRank()"><span class="ic">👑</span><b>رنکینگ</b></button>
+  <div class="half">
+    <button class="card gr" onclick="go('support')"><span class="ic">💬</span><b>پشتیبانی</b></button>
+    <button class="card sl" onclick="go('account')"><span class="ic">👤</span><b>حساب کاربری</b></button>
+  </div>
+  <button class="card nv" onclick="go('help')"><span class="ic">?</span><b>مرکز آموزش</b></button>
+</section>
+
+<section class="view" id="lobby" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>ساخت لابی</h2>
+  <select id="ltype"><option value="public">لابی عمومی</option><option value="private">لابی خصوصی (فقط با کد)</option></select>
+  <button class="btn" onclick="createLobby()">ساخت لابی</button>
+  <h2 style="margin-top:20px">ورود با کد</h2>
+  <input id="jcode" inputmode="numeric" placeholder="کد ۴ رقمی">
+  <button class="btn alt" onclick="joinLobby($('#jcode').value)">ورود</button>
+  <h2 style="margin-top:20px">لابی‌های عمومی</h2>
+  <div id="plist"></div>
+</section>
+
+<section class="view" id="room" hidden>
+  <button class="back" onclick="leaveRoom()">← خروج از لابی</button>
+  <div class="row"><span>کد لابی: <b id="rcode"></b></span><span class="tag" id="rcount"></span></div>
+  <video id="v" controls playsinline></video>
+  <input id="murl" placeholder="لینک مستقیم ویدیو یا موزیک (mp4 / mp3 / webm)" dir="ltr">
+  <button class="btn alt" onclick="setMedia()">پخش برای همه</button>
+  <input id="mfile" type="file" accept="video/*,audio/*" hidden onchange="upFile(this.files[0])">
+  <button class="btn" onclick="document.querySelector('#mfile').click()">📁 انتخاب فیلم از گالری</button>
+  <div id="upst" style="color:var(--mu);margin:0 0 10px;text-align:center"></div>
+  <div id="chat"></div>
+  <input id="ctext" placeholder="پیام..." onkeydown="if(event.key==='Enter')sendChat()">
+</section>
+
+<section class="view" id="rank" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>رنکینگ</h2><p class="sub" style="margin:6px 0 16px">هر دقیقه تماشا ۱ امتیاز، ساخت لابی ۵ امتیاز</p>
+  <div id="rlist"></div>
+</section>
+
+<section class="view" id="account" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>حساب کاربری</h2>
+  <input id="uname" placeholder="نام نمایشی">
+  <button class="btn" onclick="saveName()">ذخیره</button>
+</section>
+
+<section class="view" id="support" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>پشتیبانی</h2>
+  <input id="stext" placeholder="مشکل یا پیشنهادت را بنویس">
+  <button class="btn" onclick="sendSupport()">ارسال</button>
+</section>
+
+<section class="view" id="help" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>مرکز آموزش</h2>
+  <div class="row">۱. در «حساب کاربری» یک نام انتخاب کن.</div>
+  <div class="row">۲. «ساخت لابی» را بزن و کد را به دوستانت بده.</div>
+  <div class="row">۳. دوستانت با کد وارد می‌شوند.</div>
+  <div class="row">۴. لینک مستقیم فیلم یا آهنگ را بگذار؛ پخش و توقف برای همه همگام است.</div>
+</section>
+
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+let ws, me = localStorage.name || '', inRoom = false, applying = false, tok = '';
+const toast = t => { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); };
+const go = id => {
+  document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== id);
+  if (id === 'lobby') loadLobbies();
+  if (id === 'account') $('#uname').value = me;
+};
+const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+const needName = () => { if (me) return true; toast('اول یک نام انتخاب کن'); go('account'); return false; };
+
+function connect(cb) {
+  if (ws && ws.readyState === 1) return cb();
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onopen = cb;
+  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onclose = () => { if (inRoom) { inRoom = false; toast('اتصال قطع شد'); go('home'); } };
+}
+const createLobby = () => needName() && connect(() => send({ t: 'create', name: me, type: $('#ltype').value }));
+const joinLobby = c => needName() && connect(() => send({ t: 'join', name: me, code: String(c).trim() }));
+function leaveRoom() { inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
+
+const v = $('#v');
+const remote = fn => { applying = true; fn(); setTimeout(() => applying = false, 400); };
+v.onplay = () => !applying && send({ t: 'play', time: v.currentTime });
+v.onpause = () => !applying && send({ t: 'pause', time: v.currentTime });
+v.onseeked = () => !applying && send({ t: 'seek', time: v.currentTime });
+function upFile(f) {
+  if (!f) return;
+  const x = new XMLHttpRequest();
+  x.open('POST', '/upload?tok=' + tok);
+  x.setRequestHeader('X-Ext', (f.name.split('.').pop() || 'mp4').toLowerCase());
+  x.upload.onprogress = e => $('#upst').textContent = 'در حال آپلود... ' + Math.round(e.loaded / e.total * 100) + '٪';
+  x.onload = () => $('#upst').textContent = x.status === 200 ? 'آپلود شد ✅' : 'خطا در آپلود (' + x.status + ')';
+  x.onerror = () => $('#upst').textContent = 'خطا در آپلود';
+  x.send(f);
+}
+const setMedia = () => $('#murl').value && send({ t: 'media', url: $('#murl').value.trim() });
+
+function handle(m) {
+  if (m.t === 'error') toast(m.msg);
+  else if (m.t === 'joined') {
+    inRoom = true; tok = m.tok; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = '';
+    members(m.members);
+    if (m.media) { v.src = m.media; v.onloadedmetadata = () => remote(() => { v.currentTime = m.time; if (m.playing) v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); }); }
+  }
+  else if (m.t === 'members') members(m.members);
+  else if (m.t === 'media') { v.src = m.url; $('#murl').value = m.url; }
+  else if (m.t === 'play') remote(() => { v.currentTime = m.time; v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); });
+  else if (m.t === 'pause') remote(() => { v.currentTime = m.time; v.pause(); });
+  else if (m.t === 'seek') remote(() => v.currentTime = m.time);
+  else if (m.t === 'chat') { const p = document.createElement('p'); const b = document.createElement('b'); b.textContent = m.name + ': '; p.append(b, m.text); $('#chat').append(p); $('#chat').scrollTop = 1e9; }
+}
+const members = l => $('#rcount').textContent = l.length + ' نفر';
+function sendChat() { const t = $('#ctext').value.trim(); if (t) { send({ t: 'chat', text: t }); $('#ctext').value = ''; } }
+
+async function loadLobbies() {
+  const l = await (await fetch('/api/lobbies')).json();
+  $('#plist').innerHTML = '';
+  if (!l.length) $('#plist').innerHTML = '<p class="sub">فعلاً لابی عمومی‌ای نیست. اولی را بساز!</p>';
+  l.forEach(x => { const d = document.createElement('div'); d.className = 'row'; d.style.cursor = 'pointer'; d.textContent = `${x.title} — ${x.count} نفر`; d.onclick = () => joinLobby(x.code); $('#plist').append(d); });
+}
+async function loadRank() {
+  go('rank');
+  const l = await (await fetch('/api/ranking')).json();
+  $('#rlist').innerHTML = '';
+  if (!l.length) $('#rlist').innerHTML = '<p class="sub">هنوز کسی امتیاز نگرفته.</p>';
+  l.forEach((x, i) => { const d = document.createElement('div'); d.className = 'row'; d.textContent = `${i + 1}. ${x.name} — ${x.pts} امتیاز`; $('#rlist').append(d); });
+}
+function saveName() { me = $('#uname').value.trim().slice(0, 20); localStorage.name = me; toast('ذخیره شد'); go('home'); }
+async function sendSupport() {
+  const text = $('#stext').value.trim(); if (!text) return;
+  await fetch('/api/support', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: me, text }) });
+  $('#stext').value = ''; toast('پیامت ارسال شد'); go('home');
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

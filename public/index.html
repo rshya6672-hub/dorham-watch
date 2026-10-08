@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07070a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Dor Ham</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07070a;--tx:#f7eef0;--mu:#ad9aa1;--red:#e11d2e;--red2:#ff4558;--glass:rgba(255,255,255,.07);--gb:rgba(255,255,255,.15)}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--tx);font-family:Vazirmatn,Tahoma,sans-serif;min-height:100vh;padding:env(safe-area-inset-top) 16px 24px}
+.bg{position:fixed;inset:0;z-index:-1;overflow:hidden}
+.bg i{position:absolute;border-radius:50%;filter:blur(90px)}
+.bg i:nth-child(1){width:70vmax;height:70vmax;background:#c1121f;opacity:.55;top:-28vmax;left:-20vmax;animation:f1 14s ease-in-out infinite alternate}
+.bg i:nth-child(2){width:55vmax;height:55vmax;background:#7a0010;opacity:.7;bottom:-22vmax;right:-16vmax;animation:f1 18s ease-in-out infinite alternate-reverse}
+@keyframes f1{to{transform:translate(6vmax,5vmax) scale(1.12)}}
+@media (prefers-reduced-motion:reduce){.bg i{animation:none}}
+.glass,.row,.card,#chat,.tag{background:var(--glass);backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);border:1px solid var(--gb)}
+.view{max-width:520px;margin:0 auto;padding-top:16px}
+.view[hidden]{display:none}
+h1{font-size:40px;font-weight:800;text-align:center;margin:8px 0 4px}
+.brand{background:linear-gradient(90deg,#fff,#ff4558);-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo{width:110px;height:110px;border-radius:50%;object-fit:cover;display:block;margin:26px auto 6px;border:2px solid var(--gb);box-shadow:0 0 40px rgba(225,29,46,.55)}
+.sub{color:var(--mu);text-align:center;margin-bottom:30px}
+.card{display:flex;align-items:center;gap:14px;width:100%;border-radius:28px;padding:20px;color:#fff;font:inherit;text-align:right;cursor:pointer;margin-bottom:14px;box-shadow:0 8px 32px rgba(0,0,0,.35)}
+.card b{font-size:21px;display:block}.card small{opacity:.85}
+.ic{font-size:28px;background:rgba(255,255,255,.14);border-radius:18px;width:58px;height:58px;display:grid;place-items:center;flex:none}
+.card.or{background:linear-gradient(135deg,rgba(255,69,88,.75),rgba(150,0,20,.7));border-color:rgba(255,130,140,.4)}
+.card.pu{background:linear-gradient(135deg,rgba(150,10,30,.55),rgba(40,0,8,.55))}
+.half{display:grid;grid-template-columns:1fr 1fr;gap:14px}.half .card{flex-direction:column;align-items:flex-start;height:150px;justify-content:space-between}
+.back{background:none;border:0;color:var(--mu);font:inherit;cursor:pointer;padding:8px 0}
+input,select{width:100%;background:rgba(255,255,255,.06);border:1px solid var(--gb);border-radius:16px;padding:14px;color:var(--tx);font:inherit;margin:6px 0 12px;outline:none}
+input:focus,select:focus{border-color:var(--red2)}
+select option{background:#1a0a0d}
+.btn{width:100%;border:0;border-radius:16px;padding:14px;background:linear-gradient(135deg,var(--red2),#a30015);color:#fff;font:inherit;font-weight:800;cursor:pointer;margin-bottom:10px;box-shadow:0 6px 22px rgba(225,29,46,.4)}
+.btn.alt{background:var(--glass);border:1px solid var(--gb);box-shadow:none}
+.row{display:flex;justify-content:space-between;padding:12px 14px;border-radius:16px;margin-bottom:8px}
+video{width:100%;border-radius:20px;background:#000;max-height:40vh;border:1px solid var(--gb)}
+#chat{height:190px;overflow:auto;border-radius:20px;padding:10px;margin:10px 0;font-size:14px}
+#chat p{margin-bottom:7px}#chat b{color:var(--red2)}
+.vc{display:flex;align-items:center;gap:10px;min-width:200px;margin-top:4px}
+.vc button{width:36px;height:36px;border-radius:50%;border:0;background:linear-gradient(135deg,var(--red2),#a30015);color:#fff;font-size:13px;cursor:pointer;flex:none;margin:0}
+.tr{flex:1;height:6px;border-radius:6px;background:rgba(255,255,255,.18);overflow:hidden;direction:ltr}
+.tr i{display:block;height:100%;width:0;background:var(--red2)}
+.vc span{font-size:12px;color:var(--mu);min-width:32px;text-align:left}
+.bar{display:flex;align-items:center;gap:8px;padding:7px;border-radius:28px;margin-bottom:12px}
+.bar[hidden]{display:none}
+.bar input{margin:0;border-radius:22px;flex:1}
+.bar button{width:44px;height:44px;border:0;border-radius:50%;background:linear-gradient(135deg,var(--red2),#a30015);color:#fff;font-size:18px;cursor:pointer;flex:none}
+.bar button.ghost{background:rgba(255,255,255,.1)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--red2);animation:bl 1s infinite}
+@keyframes bl{50%{opacity:.2}}
+#rtime{flex:1;font-weight:700;text-align:center;direction:ltr}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(30,0,6,.85);border:1px solid var(--gb);padding:12px 18px;border-radius:14px;display:none}
+.tag{border-radius:10px;padding:2px 10px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="bg"><i></i><i></i></div>
+
+<section class="view" id="home">
+  <img class="logo" src="logo.jpg" alt=""><h1 class="brand">Dor Ham</h1><p class="sub">تماشای گروهی فیلم و موزیک</p>
+  <button class="card or" onclick="go('lobby')"><span class="ic">👥</span><span><b>ساخت / ورود به لابی</b><small>در مرحله بعد نوع لابی را انتخاب کن</small></span></button>
+  <button class="card pu" onclick="loadRank()"><span class="ic">👑</span><b>رنکینگ</b></button>
+  <div class="half">
+    <button class="card gr" onclick="go('support')"><span class="ic">💬</span><b>پشتیبانی</b></button>
+    <button class="card sl" onclick="go('account')"><span class="ic">👤</span><b>حساب کاربری</b></button>
+  </div>
+  <button class="card nv" onclick="go('help')"><span class="ic">?</span><b>مرکز آموزش</b></button>
+</section>
+
+<section class="view" id="lobby" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>ساخت لابی</h2>
+  <select id="ltype"><option value="public">لابی عمومی</option><option value="private">لابی خصوصی (فقط با کد)</option></select>
+  <button class="btn" onclick="createLobby()">ساخت لابی</button>
+  <h2 style="margin-top:20px">ورود با کد</h2>
+  <input id="jcode" inputmode="numeric" placeholder="کد ۴ رقمی">
+  <button class="btn alt" onclick="joinLobby($('#jcode').value)">ورود</button>
+  <h2 style="margin-top:20px">لابی‌های عمومی</h2>
+  <div id="plist"></div>
+</section>
+
+<section class="view" id="room" hidden>
+  <button class="back" onclick="leaveRoom()">← خروج از لابی</button>
+  <div class="row"><span>کد لابی: <b id="rcode"></b></span><span class="tag" id="rcount"></span></div>
+  <video id="v" controls playsinline></video>
+  <input id="murl" placeholder="لینک مستقیم ویدیو یا موزیک (mp4 / mp3 / webm)" dir="ltr">
+  <button class="btn alt" onclick="setMedia()">پخش برای همه</button>
+  <input id="mfile" type="file" accept="video/*,audio/*" hidden onchange="upFile(this.files[0])">
+  <button class="btn" onclick="document.querySelector('#mfile').click()">📁 انتخاب فیلم از گالری</button>
+  <div id="upst" style="color:var(--mu);margin:0 0 10px;text-align:center"></div>
+  <div id="chat"></div>
+  <div class="bar glass" id="ibar"><button class="ghost" onclick="startRec()">🎤</button><input id="ctext" placeholder="پیام..." onkeydown="if(event.key==='Enter')sendChat()"><button onclick="sendChat()">➤</button></div>
+  <div class="bar glass" id="rbar" hidden><button class="ghost" onclick="stopRec(false)">✕</button><span class="dot"></span><span id="rtime">0:00</span><button onclick="stopRec(true)">➤</button></div>
+</section>
+
+<section class="view" id="rank" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>رنکینگ</h2><p class="sub" style="margin:6px 0 16px">هر دقیقه تماشا ۱ امتیاز، ساخت لابی ۵ امتیاز</p>
+  <div id="rlist"></div>
+</section>
+
+<section class="view" id="account" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>حساب کاربری</h2>
+  <input id="uname" placeholder="نام نمایشی">
+  <button class="btn" onclick="saveName()">ذخیره</button>
+</section>
+
+<section class="view" id="support" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>پشتیبانی</h2>
+  <input id="stext" placeholder="مشکل یا پیشنهادت را بنویس">
+  <button class="btn" onclick="sendSupport()">ارسال</button>
+</section>
+
+<section class="view" id="help" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>مرکز آموزش</h2>
+  <div class="row">۱. در «حساب کاربری» یک نام انتخاب کن.</div>
+  <div class="row">۲. «ساخت لابی» را بزن و کد را به دوستانت بده.</div>
+  <div class="row">۳. دوستانت با کد وارد می‌شوند.</div>
+  <div class="row">۴. لینک مستقیم فیلم یا آهنگ را بگذار؛ پخش و توقف برای همه همگام است.</div>
+</section>
+
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+let ws, me = localStorage.name || '', inRoom = false, applying = false, tok = '';
+const toast = t => { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); };
+const go = id => {
+  document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== id);
+  if (id === 'lobby') loadLobbies();
+  if (id === 'account') $('#uname').value = me;
+};
+const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+const needName = () => { if (me) return true; toast('اول یک نام انتخاب کن'); go('account'); return false; };
+
+function connect(cb) {
+  if (ws && ws.readyState === 1) return cb();
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onopen = cb;
+  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onclose = () => { if (inRoom) { inRoom = false; toast('اتصال قطع شد'); go('home'); } };
+}
+const createLobby = () => needName() && connect(() => send({ t: 'create', name: me, type: $('#ltype').value }));
+const joinLobby = c => needName() && connect(() => send({ t: 'join', name: me, code: String(c).trim() }));
+function leaveRoom() { if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
+
+const v = $('#v');
+const remote = fn => { applying = true; fn(); setTimeout(() => applying = false, 400); };
+v.onplay = () => !applying && send({ t: 'play', time: v.currentTime });
+v.onpause = () => !applying && send({ t: 'pause', time: v.currentTime });
+v.onseeked = () => !applying && send({ t: 'seek', time: v.currentTime });
+function upFile(f) {
+  if (!f) return;
+  const x = new XMLHttpRequest();
+  x.open('POST', '/upload?tok=' + tok);
+  x.setRequestHeader('X-Ext', (f.name.split('.').pop() || 'mp4').toLowerCase());
+  x.upload.onprogress = e => $('#upst').textContent = 'در حال آپلود... ' + Math.round(e.loaded / e.total * 100) + '٪';
+  x.onload = () => $('#upst').textContent = x.status === 200 ? 'آپلود شد ✅' : 'خطا در آپلود (' + x.status + ')';
+  x.onerror = () => $('#upst').textContent = 'خطا در آپلود';
+  x.send(f);
+}
+const setMedia = () => $('#murl').value && send({ t: 'media', url: $('#murl').value.trim() });
+
+function handle(m) {
+  if (m.t === 'error') toast(m.msg);
+  else if (m.t === 'joined') {
+    inRoom = true; tok = m.tok; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = '';
+    members(m.members);
+    if (m.media) { v.src = m.media; v.onloadedmetadata = () => remote(() => { v.currentTime = m.time; if (m.playing) v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); }); }
+  }
+  else if (m.t === 'members') members(m.members);
+  else if (m.t === 'media') { v.src = m.url; $('#murl').value = m.url; }
+  else if (m.t === 'play') remote(() => { v.currentTime = m.time; v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); });
+  else if (m.t === 'pause') remote(() => { v.currentTime = m.time; v.pause(); });
+  else if (m.t === 'seek') remote(() => v.currentTime = m.time);
+  else if (m.t === 'chat') addChat(m);
+}
+const members = l => $('#rcount').textContent = l.length + ' نفر';
+function sendChat() { const t = $('#ctext').value.trim(); if (t) { send({ t: 'chat', text: t }); $('#ctext').value = ''; } }
+
+async function loadLobbies() {
+  const l = await (await fetch('/api/lobbies')).json();
+  $('#plist').innerHTML = '';
+  if (!l.length) $('#plist').innerHTML = '<p class="sub">فعلاً لابی عمومی‌ای نیست. اولی را بساز!</p>';
+  l.forEach(x => { const d = document.createElement('div'); d.className = 'row'; d.style.cursor = 'pointer'; d.textContent = `${x.title} — ${x.count} نفر`; d.onclick = () => joinLobby(x.code); $('#plist').append(d); });
+}
+async function loadRank() {
+  go('rank');
+  const l = await (await fetch('/api/ranking')).json();
+  $('#rlist').innerHTML = '';
+  if (!l.length) $('#rlist').innerHTML = '<p class="sub">هنوز کسی امتیاز نگرفته.</p>';
+  l.forEach((x, i) => { const d = document.createElement('div'); d.className = 'row'; d.textContent = `${i + 1}. ${x.name} — ${x.pts} امتیاز`; $('#rlist').append(d); });
+}
+function saveName() { me = $('#uname').value.trim().slice(0, 20); localStorage.name = me; toast('ذخیره شد'); go('home'); }
+async function sendSupport() {
+  const text = $('#stext').value.trim(); if (!text) return;
+  await fetch('/api/support', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: me, text }) });
+  $('#stext').value = ''; toast('پیامت ارسال شد'); go('home');
+}
+
+// چت و ویس
+let rec = null, chunks = [], rt = null, rs = 0, playing = null;
+const fmt = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+function voiceEl(m) {
+  const w = document.createElement('div'); w.className = 'vc';
+  const b = document.createElement('button'); b.textContent = '▶';
+  const tr = document.createElement('div'); tr.className = 'tr'; const f = document.createElement('i'); tr.append(f);
+  const t = document.createElement('span'); t.textContent = fmt(m.dur || 0);
+  let a = null;
+  b.onclick = () => {
+    if (!a) {
+      a = new Audio(m.voice);
+      a.ontimeupdate = () => { f.style.width = Math.min(100, a.currentTime / (m.dur || a.duration || 1) * 100) + '%'; t.textContent = fmt(a.currentTime); };
+      a.onplay = () => b.textContent = '⏸'; a.onpause = () => b.textContent = '▶';
+      a.onended = () => { f.style.width = '0'; t.textContent = fmt(m.dur || 0); };
+    }
+    if (a.paused) { if (playing && playing !== a) playing.pause(); playing = a; a.play(); } else a.pause();
+  };
+  tr.onclick = e => { if (!a) return; const r = tr.getBoundingClientRect(); a.currentTime = (e.clientX - r.left) / r.width * (m.dur || a.duration || 0); };
+  w.append(b, tr, t); return w;
+}
+function addChat(m) {
+  const p = document.createElement('p'), b = document.createElement('b');
+  b.textContent = m.name + (m.voice ? '' : ': '); p.append(b);
+  if (m.voice) p.append(voiceEl(m)); else p.append(document.createTextNode(m.text));
+  $('#chat').append(p); $('#chat').scrollTop = 1e9;
+}
+async function startRec() {
+  if (!navigator.mediaDevices || !window.MediaRecorder) return toast('ضبط صدا فقط روی https یا localhost کار می‌کند');
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mt = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(x => MediaRecorder.isTypeSupported(x)) || '';
+    rec = new MediaRecorder(st, mt ? { mimeType: mt } : {}); chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => { st.getTracks().forEach(x => x.stop()); if (rec.cancel) return; upVoice(new Blob(chunks, { type: rec.mimeType }), Math.max(1, Math.round((Date.now() - rs) / 1000))); };
+    rec.start(); rs = Date.now(); $('#ibar').hidden = true; $('#rbar').hidden = false; $('#rtime').textContent = '0:00';
+    rt = setInterval(() => { const s = (Date.now() - rs) / 1000; $('#rtime').textContent = fmt(s); if (s >= 300) stopRec(true); }, 250);
+  } catch (e) { toast('اجازه‌ی میکروفون داده نشد'); }
+}
+function stopRec(send) {
+  clearInterval(rt); $('#rbar').hidden = true; $('#ibar').hidden = false;
+  if (rec && rec.state === 'recording') { rec.cancel = !send; rec.stop(); }
+}
+async function upVoice(blob, dur) {
+  const mime = blob.type || '', ext = mime.includes('webm') ? 'webm' : mime.includes('ogg') ? 'ogg' : 'mp4';
+  try {
+    const r = await fetch('/voice?tok=' + tok, { method: 'POST', headers: { 'X-Ext': ext, 'X-Dur': String(dur) }, body: blob });
+    if (!r.ok) toast('ارسال ویس انجام نشد');
+  } catch (e) { toast('ارسال ویس انجام نشد'); }
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
