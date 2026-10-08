@@ -1,0 +1,14 @@
+<!DOCTYPE html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Admin</title>
+<body style="font-family:Tahoma,sans-serif;background:#111;color:#eee;padding:16px;max-width:520px;margin:auto">
+<h2>پنل مدیریت Dor Ham</h2>
+<input id=k type=password placeholder="رمز ADMIN_KEY" style="width:100%;padding:12px;margin:6px 0">
+<select id=d style="width:100%;padding:12px;margin:6px 0"><option value=30>ماهانه (۳۰ روز)<option value=90>سه‌ماهه (۹۰ روز)<option value=365>سالانه (۳۶۵ روز)</select>
+<button onclick=gen() style="width:100%;padding:12px;margin:6px 0">ساخت کد</button>
+<div id=o style="font-size:22px;direction:ltr;text-align:center;margin:10px;user-select:all"></div>
+<button onclick=sup() style="width:100%;padding:12px;margin:6px 0">پیام‌های پشتیبانی</button><div id=s></div>
+<script>
+const H=()=>({'x-key':k.value,'Content-Type':'application/json'});
+async function gen(){const r=await fetch('/api/admin/gen',{method:'POST',headers:H(),body:JSON.stringify({days:d.value})});const j=await r.json();o.textContent=j.code||j.err}
+async function sup(){const r=await fetch('/api/admin/support',{headers:H()});const j=await r.json();s.innerHTML=Array.isArray(j)?j.map(m=>'<p><b></b> '+'</p>').join(''):j.err;
+ if(Array.isArray(j)){s.textContent='';j.forEach(m=>{const p=document.createElement('p');p.textContent=m.name+': '+m.text;s.append(p)})}}
+</script></body></html>

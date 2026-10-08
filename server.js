@@ -110,4 +110,47 @@ setInterval(() => fs.readdirSync('uploads').forEach(f => {
   const p = 'uploads/' + f; if (Date.now() - fs.statSync(p).mtimeMs > 12 * 3600e3) fs.unlink(p, () => {});
 }), 3600e3);
 
+
+// ===== اشتراک VIP =====
+// قیمت‌ها و متن پرداخت را اینجا ویرایش کن
+const PLANS = [
+  { days: 30, name: 'ماهانه', price: '۱۰۰,۰۰۰ تومان' },
+  { days: 90, name: 'سه‌ماهه', price: '۲۵۰,۰۰۰ تومان' },
+  { days: 365, name: 'سالانه', price: '۸۰۰,۰۰۰ تومان' }
+];
+const PAY_INFO = 'برای خرید، مبلغ پلن را کارت‌به‌کارت کن و رسید را از بخش «پشتیبانی» بفرست. کد فعال‌سازی برایت ارسال می‌شود.\nشماره کارت: ----';
+const ADMIN_KEY = process.env.ADMIN_KEY || '';
+const sign = s => crypto.createHmac('sha256', ADMIN_KEY).update(s).digest('hex').slice(0, 10);
+const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const tokExp = t => { const [e, sg] = String(t || '').split('.'); return e && sg && same(sg, sign('t' + e)) ? Number(e) : 0; };
+const fails = {};
+db.used = db.used || {};
+
+app.get('/api/vip/plans', (q, r) => r.json({ plans: PLANS, pay: PAY_INFO }));
+app.get('/api/vip/check', (q, r) => {
+  const exp = ADMIN_KEY ? tokExp(q.query.token) : 0;
+  r.json({ vip: exp > Date.now(), exp });
+});
+app.post('/api/vip/redeem', (q, r) => {
+  if (!ADMIN_KEY) return r.status(503).json({ err: 'سرور هنوز برای VIP تنظیم نشده' });
+  const ip = q.ip, h = Math.floor(Date.now() / 3600000), k = ip + h;
+  if ((fails[k] || 0) >= 10) return r.status(429).json({ err: 'تلاش زیاد؛ بعداً دوباره امتحان کن' });
+  const code = String(q.body.code || '').trim();
+  const [d, n, sg] = code.split('-');
+  const days = Number(d);
+  if (!days || !n || !sg || !same(sg, sign(d + '-' + n)) || days > 3650) { fails[k] = (fails[k] || 0) + 1; return r.status(400).json({ err: 'کد نامعتبر است' }); }
+  if (db.used[code]) return r.status(400).json({ err: 'این کد قبلاً استفاده شده' });
+  const base = Math.max(Date.now(), tokExp(q.body.cur));
+  const exp = base + days * 86400000;
+  db.used[code] = Date.now(); save();
+  r.json({ token: exp + '.' + sign('t' + exp), exp });
+});
+const admin = (q, r) => { if (ADMIN_KEY && String(q.get('x-key') || '') && same(String(q.get('x-key')), ADMIN_KEY)) return true; r.status(401).json({ err: 'رمز اشتباه' }); return false; };
+app.post('/api/admin/gen', (q, r) => {
+  if (!admin(q, r)) return;
+  const d = Math.max(1, Math.min(3650, Number(q.body.days) || 30)), n = crypto.randomBytes(3).toString('hex');
+  r.json({ code: `${d}-${n}-${sign(d + '-' + n)}` });
+});
+app.get('/api/admin/support', (q, r) => { if (admin(q, r)) r.json(db.support.slice(-50).reverse()); });
+
 server.listen(process.env.PORT || 3000, () => console.log('Dor Ham running on port', process.env.PORT || 3000));

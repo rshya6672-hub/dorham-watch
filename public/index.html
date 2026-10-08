@@ -9,62 +9,82 @@
 <title>Dor Ham</title>
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#07070a;--tx:#f7eef0;--mu:#ad9aa1;--red:#e11d2e;--red2:#ff4558;--glass:rgba(255,255,255,.07);--gb:rgba(255,255,255,.15)}
+:root{--bg:#07070a;--tx:#f7eef0;--mu:#ad9aa1;--red:#e11d2e;--red2:#ff4558;--glass:rgba(255,255,255,.07);--gb:rgba(255,255,255,.15);--dk:#a30015;--b1:#c1121f;--b2:#7a0010;--glow:rgba(225,29,46,.5);--c1:rgba(255,69,88,.75);--c2:rgba(150,0,20,.7)}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg);color:var(--tx);font-family:Vazirmatn,Tahoma,sans-serif;min-height:100vh;padding:env(safe-area-inset-top) 16px 24px}
 .bg{position:fixed;inset:0;z-index:-1;overflow:hidden}
 .bg i{position:absolute;border-radius:50%;filter:blur(90px)}
-.bg i:nth-child(1){width:70vmax;height:70vmax;background:#c1121f;opacity:.55;top:-28vmax;left:-20vmax;animation:f1 14s ease-in-out infinite alternate}
-.bg i:nth-child(2){width:55vmax;height:55vmax;background:#7a0010;opacity:.7;bottom:-22vmax;right:-16vmax;animation:f1 18s ease-in-out infinite alternate-reverse}
+.bg i:nth-child(1){width:70vmax;height:70vmax;background:var(--b1);opacity:.55;top:-28vmax;left:-20vmax;animation:f1 14s ease-in-out infinite alternate}
+.bg i:nth-child(2){width:55vmax;height:55vmax;background:var(--b2);opacity:.7;bottom:-22vmax;right:-16vmax;animation:f1 18s ease-in-out infinite alternate-reverse}
 @keyframes f1{to{transform:translate(6vmax,5vmax) scale(1.12)}}
 @media (prefers-reduced-motion:reduce){.bg i{animation:none}}
 .glass,.row,.card,#chat,.tag{background:var(--glass);backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);border:1px solid var(--gb)}
 .view{max-width:520px;margin:0 auto;padding-top:16px}
 .view[hidden]{display:none}
 h1{font-size:40px;font-weight:800;text-align:center;margin:8px 0 4px}
-.brand{background:linear-gradient(90deg,#fff,#ff4558);-webkit-background-clip:text;background-clip:text;color:transparent}
-.logo{width:110px;height:110px;border-radius:50%;object-fit:cover;display:block;margin:26px auto 6px;border:2px solid var(--gb);box-shadow:0 0 40px rgba(225,29,46,.55)}
+.brand{background:linear-gradient(90deg,#fff,var(--red2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo{width:110px;height:110px;border-radius:50%;object-fit:cover;display:block;margin:26px auto 6px;border:2px solid var(--gb);box-shadow:0 0 40px var(--glow)}
 .sub{color:var(--mu);text-align:center;margin-bottom:30px}
 .card{display:flex;align-items:center;gap:14px;width:100%;border-radius:28px;padding:20px;color:#fff;font:inherit;text-align:right;cursor:pointer;margin-bottom:14px;box-shadow:0 8px 32px rgba(0,0,0,.35)}
 .card b{font-size:21px;display:block}.card small{opacity:.85}
 .ic{font-size:28px;background:rgba(255,255,255,.14);border-radius:18px;width:58px;height:58px;display:grid;place-items:center;flex:none}
-.card.or{background:linear-gradient(135deg,rgba(255,69,88,.75),rgba(150,0,20,.7));border-color:rgba(255,130,140,.4)}
+.card.or{background:linear-gradient(135deg,var(--c1),var(--c2));border-color:rgba(255,130,140,.4)}
 .card.pu{background:linear-gradient(135deg,rgba(150,10,30,.55),rgba(40,0,8,.55))}
 .half{display:grid;grid-template-columns:1fr 1fr;gap:14px}.half .card{flex-direction:column;align-items:flex-start;height:150px;justify-content:space-between}
 .back{background:none;border:0;color:var(--mu);font:inherit;cursor:pointer;padding:8px 0}
 input,select{width:100%;background:rgba(255,255,255,.06);border:1px solid var(--gb);border-radius:16px;padding:14px;color:var(--tx);font:inherit;margin:6px 0 12px;outline:none}
 input:focus,select:focus{border-color:var(--red2)}
 select option{background:#1a0a0d}
-.btn{width:100%;border:0;border-radius:16px;padding:14px;background:linear-gradient(135deg,var(--red2),#a30015);color:#fff;font:inherit;font-weight:800;cursor:pointer;margin-bottom:10px;box-shadow:0 6px 22px rgba(225,29,46,.4)}
+.btn{width:100%;border:0;border-radius:16px;padding:14px;background:linear-gradient(135deg,var(--red2),var(--dk));color:#fff;font:inherit;font-weight:800;cursor:pointer;margin-bottom:10px;box-shadow:0 6px 22px var(--glow)}
 .btn.alt{background:var(--glass);border:1px solid var(--gb);box-shadow:none}
 .row{display:flex;justify-content:space-between;padding:12px 14px;border-radius:16px;margin-bottom:8px}
 video{width:100%;border-radius:20px;background:#000;max-height:40vh;border:1px solid var(--gb)}
 #chat{height:190px;overflow:auto;border-radius:20px;padding:10px;margin:10px 0;font-size:14px}
 #chat p{margin-bottom:7px}#chat b{color:var(--red2)}
 .vc{display:flex;align-items:center;gap:10px;min-width:200px;margin-top:4px}
-.vc button{width:36px;height:36px;border-radius:50%;border:0;background:linear-gradient(135deg,var(--red2),#a30015);color:#fff;font-size:13px;cursor:pointer;flex:none;margin:0}
+.vc button{width:36px;height:36px;border-radius:50%;border:0;background:linear-gradient(135deg,var(--red2),var(--dk));color:#fff;font-size:13px;cursor:pointer;flex:none;margin:0}
 .tr{flex:1;height:6px;border-radius:6px;background:rgba(255,255,255,.18);overflow:hidden;direction:ltr}
 .tr i{display:block;height:100%;width:0;background:var(--red2)}
 .vc span{font-size:12px;color:var(--mu);min-width:32px;text-align:left}
 .bar{display:flex;align-items:center;gap:8px;padding:7px;border-radius:28px;margin-bottom:12px}
 .bar[hidden]{display:none}
 .bar input{margin:0;border-radius:22px;flex:1}
-.bar button{width:44px;height:44px;border:0;border-radius:50%;background:linear-gradient(135deg,var(--red2),#a30015);color:#fff;font-size:18px;cursor:pointer;flex:none}
+.bar button{width:44px;height:44px;border:0;border-radius:50%;background:linear-gradient(135deg,var(--red2),var(--dk));color:#fff;font-size:18px;cursor:pointer;flex:none}
 .bar button.ghost{background:rgba(255,255,255,.1)}
 .dot{width:12px;height:12px;border-radius:50%;background:var(--red2);animation:bl 1s infinite}
 @keyframes bl{50%{opacity:.2}}
 #rtime{flex:1;font-weight:700;text-align:center;direction:ltr}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(30,0,6,.85);border:1px solid var(--gb);padding:12px 18px;border-radius:14px;display:none}
 .tag{border-radius:10px;padding:2px 10px;font-size:13px}
+
+.fx{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.fx span{position:absolute;top:-8vh;animation:fall linear infinite;opacity:.75}
+@keyframes fall{to{transform:translateY(115vh) rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.fx{display:none}}
+.card.vipc{background:linear-gradient(135deg,rgba(255,216,107,.85),rgba(160,105,0,.8));color:#2a1c00;border-color:rgba(255,230,150,.6)}
+.card.vipc .ic{background:rgba(255,255,255,.3)}
+body[data-theme=gold]{--bg:#0c0904;--tx:#fff4d6;--mu:#c9b27a;--red:#d4a017;--red2:#ffd86b;--dk:#a67c00;--b1:#c8921a;--b2:#6b4a00;--glow:rgba(255,200,60,.5);--c1:rgba(255,216,107,.8);--c2:rgba(150,100,0,.75);--gb:rgba(255,220,130,.3)}
+body[data-theme=gold] .btn:not(.alt),body[data-theme=gold] .card.or,body[data-theme=gold] .vc button,body[data-theme=gold] .bar button:not(.ghost){color:#2a1c00}
+body[data-theme=gold] .brand{background-image:linear-gradient(90deg,#fff3b0,#ffc83d,#fff3b0);background-size:200%;animation:sh 4s linear infinite}
+@keyframes sh{to{background-position:200%}}
+body[data-theme=doll]{--bg:#1a0714;--tx:#fff0f8;--mu:#e0a8c8;--red:#ff5fa8;--red2:#ff9fd0;--dk:#d6358a;--b1:#ff6fb5;--b2:#b57bff;--glow:rgba(255,120,190,.5);--c1:rgba(255,130,200,.8);--c2:rgba(190,90,255,.6);--gb:rgba(255,190,225,.32)}
+body[data-theme=doll] .card{border-radius:40px}body[data-theme=doll] .btn,body[data-theme=doll] input{border-radius:28px}
+body[data-theme=anime]{--bg:#070a1c;--tx:#eef2ff;--mu:#9fb0e8;--red:#6a5cff;--red2:#8a7dff;--dk:#4a2bd6;--b1:#5b4bff;--b2:#ff4fa3;--glow:rgba(120,140,255,.55);--c1:rgba(138,125,255,.75);--c2:rgba(255,79,163,.55);--gb:rgba(170,200,255,.3)}
+body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7dff,#ff8fcf)}
+.th{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 16px}
+.th button{border:1px solid var(--gb);background:var(--glass);color:var(--tx);border-radius:18px;padding:14px;font:inherit;cursor:pointer}
+.th button.on{border-color:var(--red2);box-shadow:0 0 18px var(--glow)}
+.pre{white-space:pre-line;color:var(--mu);margin:8px 0 14px}
 </style>
 </head>
 <body>
-<div class="bg"><i></i><i></i></div>
+<div class="bg"><i></i><i></i></div><div class="fx" id="fx"></div>
 
 <section class="view" id="home">
   <img class="logo" src="logo.jpg" alt=""><h1 class="brand">Dor Ham</h1><p class="sub">تماشای گروهی فیلم و موزیک</p>
   <button class="card or" onclick="go('lobby')"><span class="ic">👥</span><span><b>ساخت / ورود به لابی</b><small>در مرحله بعد نوع لابی را انتخاب کن</small></span></button>
   <button class="card pu" onclick="loadRank()"><span class="ic">👑</span><b>رنکینگ</b></button>
+  <button class="card vipc" onclick="go('vip')"><span class="ic">👑</span><span><b>اشتراک VIP</b><small>تم طلایی، عروسکی و انیمه‌ای</small></span></button>
   <div class="half">
     <button class="card gr" onclick="go('support')"><span class="ic">💬</span><b>پشتیبانی</b></button>
     <button class="card sl" onclick="go('account')"><span class="ic">👤</span><b>حساب کاربری</b></button>
@@ -127,12 +147,26 @@ video{width:100%;border-radius:20px;background:#000;max-height:40vh;border:1px s
   <div class="row">۴. لینک مستقیم فیلم یا آهنگ را بگذار؛ پخش و توقف برای همه همگام است.</div>
 </section>
 
+<section class="view" id="vip" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>👑 اشتراک VIP</h2>
+  <p class="sub" id="vst" style="margin:6px 0 10px"></p>
+  <b>انتخاب تم</b>
+  <div class="th" id="ths"></div>
+  <b>پلن‌ها</b>
+  <div id="plans" style="margin-top:8px"></div>
+  <p class="pre" id="pay"></p>
+  <input id="vcode" placeholder="کد فعال‌سازی" dir="ltr">
+  <button class="btn" onclick="redeem()">فعال‌سازی VIP</button>
+  <button class="btn alt" onclick="go('support')">ارسال رسید به پشتیبانی</button>
+</section>
+
 <div id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
 let ws, me = localStorage.name || '', inRoom = false, applying = false, tok = '';
 const toast = t => { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); };
-const go = id => {
+let go = id => {
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== id);
   if (id === 'lobby') loadLobbies();
   if (id === 'account') $('#uname').value = me;
@@ -256,6 +290,48 @@ async function upVoice(blob, dur) {
   } catch (e) { toast('ارسال ویس انجام نشد'); }
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+// ===== VIP و تم‌ها =====
+const THEMES = { red: ['کلاسیک', '🖤'], gold: ['طلایی', '👑'], doll: ['عروسکی', '🎀'], anime: ['انیمه‌ای', '🌸'] };
+const FXE = { gold: ['✨', '⭐'], doll: ['🎀', '🧸', '💗'], anime: ['🌸', '🌸', '✨'] };
+let vip = null; try { vip = JSON.parse(localStorage.vip || 'null'); } catch {}
+const isVip = () => vip && vip.exp > Date.now();
+function setTheme(t) {
+  document.body.dataset.theme = t; const f = $('#fx'); f.textContent = '';
+  (FXE[t] ? Array.from({ length: 12 }) : []).forEach((_, i) => {
+    const s = document.createElement('span'); s.textContent = FXE[t][i % FXE[t].length];
+    s.style.cssText = `left:${Math.random() * 96}%;font-size:${14 + Math.random() * 16}px;animation-duration:${9 + Math.random() * 9}s;animation-delay:-${Math.random() * 12}s`; f.append(s);
+  });
+}
+const applyTheme = () => setTheme(isVip() ? (localStorage.theme || 'gold') : 'red');
+async function checkVip() {
+  if (vip) try { const r = await (await fetch('/api/vip/check?token=' + encodeURIComponent(vip.token))).json(); if (r.vip) vip.exp = r.exp; else { vip = null; localStorage.removeItem('vip'); } } catch {}
+  applyTheme();
+}
+async function renderVip() {
+  const cur = isVip() ? (localStorage.theme || 'gold') : null;
+  $('#vst').textContent = isVip() ? `✅ VIP فعال است — ${Math.ceil((vip.exp - Date.now()) / 864e5)} روز باقی‌مانده` : 'اشتراک VIP نداری. تم‌ها را پیش‌نمایش کن 👇';
+  $('#ths').textContent = '';
+  Object.entries(THEMES).forEach(([k, [n, e]]) => {
+    const b = document.createElement('button'); b.textContent = `${e} ${n}` + (k !== 'red' && !isVip() ? ' 🔒' : ''); if (k === (cur || 'red')) b.className = 'on';
+    b.onclick = () => { if (isVip() || k === 'red') { localStorage.theme = k; setTheme(k); renderVip(); } else { setTheme(k); toast('پیش‌نمایش؛ برای استفاده VIP بخر'); } };
+    $('#ths').append(b);
+  });
+  try {
+    const p = await (await fetch('/api/vip/plans')).json(); $('#plans').textContent = '';
+    p.plans.forEach(x => { const d = document.createElement('div'); d.className = 'row'; const a = document.createElement('span'), c = document.createElement('b'); a.textContent = `${x.name} (${x.days} روز)`; c.textContent = x.price; d.append(a, c); $('#plans').append(d); });
+    $('#pay').textContent = p.pay;
+  } catch {}
+}
+async function redeem() {
+  const code = $('#vcode').value.trim(); if (!code) return toast('کد را بنویس');
+  const r = await fetch('/api/vip/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, cur: vip && vip.token }) });
+  const j = await r.json(); if (!r.ok) return toast(j.err || 'خطا');
+  vip = j; localStorage.vip = JSON.stringify(j); if (!localStorage.theme) localStorage.theme = 'gold';
+  $('#vcode').value = ''; applyTheme(); renderVip(); toast('👑 VIP فعال شد!');
+}
+const _go = go; go = id => { _go(id); if (id === 'vip') renderVip(); else applyTheme(); };
+applyTheme(); checkVip();
 </script>
 </body>
 </html>
