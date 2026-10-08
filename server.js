@@ -1,6 +1,7 @@
 const express = require('express'), http = require('http'), fs = require('fs'), crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static('public'));
 fs.mkdirSync('uploads', { recursive: true });
@@ -152,5 +153,16 @@ app.post('/api/admin/gen', (q, r) => {
   r.json({ code: `${d}-${n}-${sign(d + '-' + n)}` });
 });
 app.get('/api/admin/support', (q, r) => { if (admin(q, r)) r.json(db.support.slice(-50).reverse()); });
+
+
+// ===== دعوت دوستان =====
+db.refd = db.refd || {}; db.refip = db.refip || {};
+app.post('/api/ref', (q, r) => {
+  const ref = String(q.body.ref || '').slice(0, 20), n = String(q.body.name || '').slice(0, 20);
+  if (!ref || !n || ref === n || !(ref in db.scores) || db.refd[n] || db.refip[q.ip]) return r.json({ ok: 0 });
+  db.refd[n] = ref; db.refip[q.ip] = 1;
+  db.scores[ref] += 50; db.scores[n] = (db.scores[n] || 0) + 20; save();
+  r.json({ ok: 1 });
+});
 
 server.listen(process.env.PORT || 3000, () => console.log('Dor Ham running on port', process.env.PORT || 3000));

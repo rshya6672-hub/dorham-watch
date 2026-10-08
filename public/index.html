@@ -7,6 +7,9 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <title>Dor Ham</title>
+<meta property="og:title" content="Dor Ham - تماشای گروهی فیلم و موزیک">
+<meta property="og:description" content="با دوستانت همزمان فیلم ببین و چت کن 🎬">
+<meta property="og:image" content="https://dorham-watch.onrender.com/logo.jpg">
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#07070a;--tx:#f7eef0;--mu:#ad9aa1;--red:#e11d2e;--red2:#ff4558;--glass:rgba(255,255,255,.07);--gb:rgba(255,255,255,.15);--dk:#a30015;--b1:#c1121f;--b2:#7a0010;--glow:rgba(225,29,46,.5);--c1:rgba(255,69,88,.75);--c2:rgba(150,0,20,.7)}
@@ -85,6 +88,7 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
   <button class="card or" onclick="go('lobby')"><span class="ic">👥</span><span><b>ساخت / ورود به لابی</b><small>در مرحله بعد نوع لابی را انتخاب کن</small></span></button>
   <button class="card pu" onclick="loadRank()"><span class="ic">👑</span><b>رنکینگ</b></button>
   <button class="card vipc" onclick="go('vip')"><span class="ic">👑</span><span><b>اشتراک VIP</b><small>تم طلایی، عروسکی و انیمه‌ای</small></span></button>
+  <button class="card pu" onclick="go('invite')"><span class="ic">🎁</span><span><b>نصب و دعوت دوستان</b><small>برای هر دعوت ۵۰ امتیاز</small></span></button>
   <div class="half">
     <button class="card gr" onclick="go('support')"><span class="ic">💬</span><b>پشتیبانی</b></button>
     <button class="card sl" onclick="go('account')"><span class="ic">👤</span><b>حساب کاربری</b></button>
@@ -145,6 +149,16 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
   <div class="row">۲. «ساخت لابی» را بزن و کد را به دوستانت بده.</div>
   <div class="row">۳. دوستانت با کد وارد می‌شوند.</div>
   <div class="row">۴. لینک مستقیم فیلم یا آهنگ را بگذار؛ پخش و توقف برای همه همگام است.</div>
+</section>
+
+<section class="view" id="invite" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>🎁 نصب و دعوت دوستان</h2>
+  <button class="btn" onclick="installApp()">📲 نصب برنامه روی گوشی</button>
+  <p class="pre" id="ihelp"></p>
+  <button class="btn" onclick="shareApp()">🔗 ارسال لینک دعوت به دوستان</button>
+  <div class="row" style="direction:ltr;word-break:break-all;user-select:all" id="ilink"></div>
+  <p class="pre">هر دوستی که با لینک تو وارد شود و نامش را ثبت کند، ۵۰ امتیاز برای تو و ۲۰ امتیاز برای خودش ثبت می‌شود.</p>
 </section>
 
 <section class="view" id="vip" hidden>
@@ -232,7 +246,7 @@ async function loadRank() {
   if (!l.length) $('#rlist').innerHTML = '<p class="sub">هنوز کسی امتیاز نگرفته.</p>';
   l.forEach((x, i) => { const d = document.createElement('div'); d.className = 'row'; d.textContent = `${i + 1}. ${x.name} — ${x.pts} امتیاز`; $('#rlist').append(d); });
 }
-function saveName() { me = $('#uname').value.trim().slice(0, 20); localStorage.name = me; toast('ذخیره شد'); go('home'); }
+function saveName() { me = $('#uname').value.trim().slice(0, 20); localStorage.name = me; toast('ذخیره شد'); claimRef(); go('home'); }
 async function sendSupport() {
   const text = $('#stext').value.trim(); if (!text) return;
   await fetch('/api/support', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: me, text }) });
@@ -330,8 +344,33 @@ async function redeem() {
   vip = j; localStorage.vip = JSON.stringify(j); if (!localStorage.theme) localStorage.theme = 'gold';
   $('#vcode').value = ''; applyTheme(); renderVip(); toast('👑 VIP فعال شد!');
 }
-const _go = go; go = id => { _go(id); if (id === 'vip') renderVip(); else applyTheme(); };
-applyTheme(); checkVip();
+const _go = go; go = id => { _go(id); if (id === 'vip') renderVip(); else applyTheme(); if (id === 'invite') renderInvite(); };
+
+// ===== نصب و دعوت =====
+let dip = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); dip = e; });
+const REF = new URLSearchParams(location.search).get('ref');
+if (REF && !localStorage.refDone) localStorage.ref = REF.slice(0, 20);
+const myLink = () => `${location.origin}/?ref=${encodeURIComponent(me)}`;
+async function claimRef() {
+  if (!localStorage.ref || localStorage.refDone || !me) return;
+  try { const r = await (await fetch('/api/ref', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: localStorage.ref, name: me }) })).json(); localStorage.refDone = 1; if (r.ok) toast('🎁 ۲۰ امتیاز هدیه گرفتی!'); } catch {}
+}
+function renderInvite() {
+  $('#ilink').textContent = me ? myLink() : 'اول در «حساب کاربری» یک نام انتخاب کن';
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), st = matchMedia('(display-mode: standalone)').matches;
+  $('#ihelp').textContent = st ? '✅ برنامه روی گوشی‌ات نصب است.' : ios ? 'آیفون: در Safari دکمه Share ← Add to Home Screen' : 'اگر دکمه کار نکرد: منوی Chrome (سه‌نقطه) ← Install app';
+}
+async function installApp() {
+  if (dip) { dip.prompt(); await dip.userChoice; dip = null; } else toast('راهنمای نصب را زیر دکمه بخوان');
+}
+async function shareApp() {
+  if (!needName()) return;
+  const d = { title: 'Dor Ham', text: 'با من توی Dor Ham همزمان فیلم ببین 🎬', url: myLink() };
+  if (navigator.share) try { await navigator.share(d); return; } catch { return; }
+  try { await navigator.clipboard.writeText(`${d.text}\n${d.url}`); toast('لینک کپی شد'); } catch { toast('لینک را از کادر کپی کن'); }
+}
+applyTheme(); checkVip(); claimRef();
 </script>
 </body>
 </html>
