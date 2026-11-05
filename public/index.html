@@ -78,16 +78,22 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
 .th button{border:1px solid var(--gb);background:var(--glass);color:var(--tx);border-radius:18px;padding:14px;font:inherit;cursor:pointer}
 .th button.on{border-color:var(--red2);box-shadow:0 0 18px var(--glow)}
 .pre{white-space:pre-line;color:var(--mu);margin:8px 0 14px}
+[hidden]{display:none!important}
+#ubg{position:fixed;inset:0;z-index:-2;background-size:cover;background-position:center}
+#ubg::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.45)}
+body.ubg .bg{display:none}
+#callst{color:var(--mu);text-align:center;margin:0 0 10px}
 </style>
 </head>
 <body>
-<div class="bg"><i></i><i></i></div><div class="fx" id="fx"></div>
+<div class="bg"><i></i><i></i></div><div id="ubg"></div><div class="fx" id="fx"></div>
 
 <section class="view" id="home">
   <img class="logo" src="logo.jpg" alt=""><h1 class="brand">Dor Ham</h1><p class="sub">تماشای گروهی فیلم و موزیک</p>
   <button class="card or" onclick="go('lobby')"><span class="ic">👥</span><span><b>ساخت / ورود به لابی</b><small>در مرحله بعد نوع لابی را انتخاب کن</small></span></button>
   <button class="card pu" onclick="loadRank()"><span class="ic">👑</span><b>رنکینگ</b></button>
   <button class="card vipc" onclick="go('vip')"><span class="ic">👑</span><span><b>اشتراک VIP</b><small>تم طلایی، عروسکی و انیمه‌ای</small></span></button>
+  <button class="card gr" id="admcard" onclick="go('adm')" hidden><span class="ic">👁</span><span><b>پنل مدیر</b><small>آمار و ورود به لابی‌ها</small></span></button>
   <button class="card pu" onclick="go('invite')"><span class="ic">🎁</span><span><b>نصب و دعوت دوستان</b><small>برای هر دعوت ۵۰ امتیاز</small></span></button>
   <div class="half">
     <button class="card gr" onclick="go('support')"><span class="ic">💬</span><b>پشتیبانی</b></button>
@@ -111,6 +117,9 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
 <section class="view" id="room" hidden>
   <button class="back" onclick="leaveRoom()">← خروج از لابی</button>
   <div class="row"><span>کد لابی: <b id="rcode"></b></span><span class="tag" id="rcount"></span></div>
+  <button class="btn alt" id="callbtn" onclick="toggleCall()">📞 پیوستن به تماس صوتی</button>
+  <button class="btn alt" id="mutebtn" onclick="toggleMute()" hidden>🔇 قطع میکروفن</button>
+  <div id="callst"></div><div id="audios" hidden></div>
   <video id="v" controls playsinline></video>
   <input id="murl" placeholder="لینک مستقیم ویدیو یا موزیک (mp4 / mp3 / webm)" dir="ltr">
   <button class="btn alt" onclick="setMedia()">پخش برای همه</button>
@@ -133,6 +142,8 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
   <h2>حساب کاربری</h2>
   <input id="uname" placeholder="نام نمایشی">
   <button class="btn" onclick="saveName()">ذخیره</button>
+  <details style="margin-top:18px"><summary style="color:var(--mu)">مدیر</summary>
+    <input id="akey" type="password" placeholder="رمز مدیر" dir="ltr"><button class="btn alt" onclick="admLogin()">ورود مدیر</button></details>
 </section>
 
 <section class="view" id="support" hidden>
@@ -151,6 +162,15 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
   <div class="row">۴. لینک مستقیم فیلم یا آهنگ را بگذار؛ پخش و توقف برای همه همگام است.</div>
 </section>
 
+<section class="view" id="adm" hidden>
+  <button class="back" onclick="go('home')">← بازگشت</button>
+  <h2>👁 پنل مدیر</h2>
+  <p class="pre" id="astats"></p>
+  <div id="arooms"></div>
+  <button class="btn alt" onclick="loadAdm()">بروزرسانی</button>
+  <button class="btn alt" onclick="admOut()">خروج از حالت مدیر</button>
+</section>
+
 <section class="view" id="invite" hidden>
   <button class="back" onclick="go('home')">← بازگشت</button>
   <h2>🎁 نصب و دعوت دوستان</h2>
@@ -167,6 +187,10 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
   <p class="sub" id="vst" style="margin:6px 0 10px"></p>
   <b>انتخاب تم</b>
   <div class="th" id="ths"></div>
+  <b>پس‌زمینه‌ی دلخواه (VIP)</b>
+  <input id="bgfile" type="file" accept="image/*" hidden onchange="setBg(this.files[0])">
+  <button class="btn alt" style="margin-top:8px" onclick="pickBg()">🖼 انتخاب پس‌زمینه از گالری</button>
+  <button class="btn alt" onclick="clearBg()">حذف پس‌زمینه</button>
   <b>پلن‌ها</b>
   <div id="plans" style="margin-top:8px"></div>
   <p class="pre" id="pay"></p>
@@ -193,7 +217,7 @@ function connect(cb) {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
   ws.onopen = cb;
   ws.onmessage = e => handle(JSON.parse(e.data));
-  ws.onclose = () => { if (inRoom) { toast('اتصال قطع شد؛ در حال اتصال مجدد...'); retry(); } };
+  ws.onclose = () => { stopCall(); if (inRoom) { toast('اتصال قطع شد؛ در حال اتصال مجدد...'); retry(); } };
 }
 const createLobby = () => needName() && connect(() => send({ t: 'create', name: me, type: $('#ltype').value }));
 const joinLobby = c => needName() && connect(() => send({ t: 'join', name: me, code: String(c).trim() }));
@@ -207,7 +231,7 @@ function retry() {
 const resume = () => { if (localStorage.room && me && !(ws && ws.readyState === 1)) { ws = null; connect(() => send({ t: 'join', name: me, code: localStorage.room })); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resume(); });
 addEventListener('online', resume);
-function leaveRoom() { localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
+function leaveRoom() { endCall(); localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
 
 const v = $('#v');
 const remote = fn => { applying = true; fn(); setTimeout(() => applying = false, 400); };
@@ -229,10 +253,14 @@ const setMedia = () => $('#murl').value && send({ t: 'media', url: $('#murl').va
 function handle(m) {
   if (m.t === 'error') { toast(m.msg); localStorage.removeItem('room'); if (inRoom) { inRoom = false; go('home'); } }
   else if (m.t === 'joined') {
-    inRoom = true; tok = m.tok; localStorage.room = m.code; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = ''; (m.chat || []).forEach(addChat);
+    inRoom = true; tok = m.tok; if (!m.ghost) localStorage.room = m.code; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = ''; (m.chat || []).forEach(addChat);
     members(m.members);
     if (m.media) { v.src = m.media; v.onloadedmetadata = () => remote(() => { v.currentTime = m.time; if (m.playing) v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); }); }
   }
+  else if (m.t === 'callers') (m.list || []).forEach(callPeer);
+  else if (m.t === 'callon') { if (localStream) toast(m.name + ' به تماس پیوست'); }
+  else if (m.t === 'calloff') dropPeer(m.name);
+  else if (m.t === 'rtc') onRtc(m);
   else if (m.t === 'members') members(m.members);
   else if (m.t === 'media') { v.src = m.url; $('#murl').value = m.url; }
   else if (m.t === 'play') remote(() => { v.currentTime = m.time; v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); });
@@ -327,7 +355,7 @@ function setTheme(t) {
     s.style.cssText = `left:${Math.random() * 96}%;font-size:${14 + Math.random() * 16}px;animation-duration:${9 + Math.random() * 9}s;animation-delay:-${Math.random() * 12}s`; f.append(s);
   });
 }
-const applyTheme = () => setTheme(isVip() ? (localStorage.theme || 'gold') : 'red');
+const applyTheme = () => { setTheme(isVip() ? (localStorage.theme || 'gold') : 'red'); applyBg(); };
 async function checkVip() {
   if (vip) try { const r = await (await fetch('/api/vip/check?token=' + encodeURIComponent(vip.token))).json(); if (r.vip) vip.exp = r.exp; else { vip = null; localStorage.removeItem('vip'); } } catch {}
   applyTheme();
@@ -354,7 +382,7 @@ async function redeem() {
   vip = j; localStorage.vip = JSON.stringify(j); if (!localStorage.theme) localStorage.theme = 'gold';
   $('#vcode').value = ''; applyTheme(); renderVip(); toast('👑 VIP فعال شد!');
 }
-const _go = go; go = id => { _go(id); if (id === 'vip') renderVip(); else applyTheme(); if (id === 'invite') renderInvite(); };
+const _go = go; go = id => { _go(id); if (id === 'vip') renderVip(); else applyTheme(); if (id === 'invite') renderInvite(); if (id === 'adm') loadAdm(); };
 
 // ===== نصب و دعوت =====
 let dip = null;
@@ -380,6 +408,83 @@ async function shareApp() {
   if (navigator.share) try { await navigator.share(d); return; } catch { return; }
   try { await navigator.clipboard.writeText(`${d.text}\n${d.url}`); toast('لینک کپی شد'); } catch { toast('لینک را از کادر کپی کن'); }
 }
+
+// ===== تماس صوتی داخل لابی (WebRTC) =====
+let localStream = null, pcs = {}, ice = null, muted = false;
+async function iceCfg() { if (!ice) try { ice = await (await fetch('/api/ice')).json(); } catch { ice = [{ urls: 'stun:stun.l.google.com:19302' }]; } return ice; }
+function mkPc(name) {
+  if (pcs[name]) return pcs[name];
+  const pc = new RTCPeerConnection({ iceServers: ice }); pc.pend = []; pcs[name] = pc;
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.onicecandidate = e => e.candidate && send({ t: 'rtc', to: name, data: { c: e.candidate } });
+  pc.ontrack = e => { let a = document.getElementById('a_' + name); if (!a) { a = document.createElement('audio'); a.id = 'a_' + name; a.autoplay = true; a.playsInline = true; $('#audios').append(a); } a.srcObject = e.streams[0]; a.play().catch(() => {}); };
+  pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') dropPeer(name); else updCall(); };
+  return pc;
+}
+function dropPeer(n) { const pc = pcs[n]; if (pc) { pc.close(); delete pcs[n]; } const a = document.getElementById('a_' + n); if (a) a.remove(); updCall(); }
+async function callPeer(n) { const pc = mkPc(n); await pc.setLocalDescription(await pc.createOffer()); send({ t: 'rtc', to: n, data: { d: pc.localDescription } }); }
+async function onRtc(m) {
+  if (!localStream) return; const pc = mkPc(m.from), d = m.data || {};
+  try {
+    if (d.d) {
+      await pc.setRemoteDescription(d.d);
+      if (d.d.type === 'offer') { await pc.setLocalDescription(await pc.createAnswer()); send({ t: 'rtc', to: m.from, data: { d: pc.localDescription } }); }
+      for (const c of pc.pend.splice(0)) await pc.addIceCandidate(c).catch(() => {});
+    } else if (d.c) { if (pc.remoteDescription) await pc.addIceCandidate(d.c); else pc.pend.push(d.c); }
+  } catch {}
+}
+async function toggleCall() {
+  if (localStream) return endCall();
+  if (!navigator.mediaDevices) return toast('مرورگر از تماس پشتیبانی نمی‌کند');
+  try { await iceCfg(); localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { return toast('اجازه‌ی میکروفن لازم است'); }
+  send({ t: 'callon' }); updCall();
+}
+function stopCall() { if (localStream) localStream.getTracks().forEach(t => t.stop()); localStream = null; muted = false; Object.keys(pcs).forEach(dropPeer); updCall(); }
+function endCall() { if (localStream) send({ t: 'calloff' }); stopCall(); }
+function toggleMute() { if (!localStream) return; muted = !muted; localStream.getAudioTracks().forEach(t => t.enabled = !muted); updCall(); }
+function updCall() {
+  $('#callbtn').textContent = localStream ? '📴 قطع تماس' : '📞 پیوستن به تماس صوتی';
+  $('#mutebtn').hidden = !localStream; $('#mutebtn').textContent = muted ? '🎙 روشن کردن میکروفن' : '🔇 قطع میکروفن';
+  const on = Object.entries(pcs).filter(([, p]) => p.connectionState === 'connected').map(([n]) => n);
+  $('#callst').textContent = localStream ? (on.length ? 'در تماس: ' + on.join('، ') : 'منتظر دیگران... (برای بهتر شدن صدا از هدفون استفاده کن)') : '';
+}
+
+// ===== پس‌زمینه دلخواه (VIP) =====
+function pickBg() { if (!isVip()) return toast('این قابلیت مخصوص VIP است'); $('#bgfile').click(); }
+function setBg(f) {
+  if (!f) return; const img = new Image();
+  img.onload = () => {
+    const s = Math.min(1, 1000 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = img.width * s; c.height = img.height * s;
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    try { localStorage.bg = c.toDataURL('image/jpeg', .8); applyBg(); toast('پس‌زمینه تغییر کرد'); } catch { toast('تصویر خیلی بزرگ است'); }
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(f);
+}
+function clearBg() { localStorage.removeItem('bg'); applyBg(); }
+function applyBg() { const b = isVip() && localStorage.bg; $('#ubg').style.backgroundImage = b ? `url(${b})` : ''; document.body.classList.toggle('ubg', !!b); }
+
+// ===== پنل مدیر =====
+const AK = () => localStorage.adm || '';
+const showAdm = () => { $('#admcard').hidden = !AK(); };
+async function admFetch() { const r = await fetch('/api/admin/stats', { headers: { 'x-key': AK() } }); if (!r.ok) throw 0; return r.json(); }
+async function admLogin() { localStorage.adm = $('#akey').value.trim(); $('#akey').value = ''; try { await admFetch(); showAdm(); toast('وارد حالت مدیر شدی'); go('adm'); } catch { localStorage.removeItem('adm'); toast('رمز اشتباه است'); } }
+function admOut() { localStorage.removeItem('adm'); showAdm(); go('home'); }
+async function loadAdm() {
+  try {
+    const s = await admFetch();
+    $('#astats').textContent = `کاربران ثبت‌شده: ${s.users}\nلابی‌های ساخته‌شده: ${s.lobbiesTotal}\nلابی‌های فعال: ${s.rooms.length}\nآنلاین الان: ${s.online}\nکدهای VIP مصرف‌شده: ${s.vipCodesUsed}\n(آمار با ری‌استارت سرور صفر می‌شود)`;
+    const box = $('#arooms'); box.textContent = '';
+    s.rooms.forEach(x => {
+      const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('button'); d.className = 'row';
+      a.textContent = `${x.code} ${x.type === 'private' ? '🔒' : '🌐'} ${x.count} نفر` + (x.members.length ? ' (' + x.members.join('، ') + ')' : '');
+      b.className = 'btn'; b.style.cssText = 'width:auto;margin:0;padding:8px 16px'; b.textContent = 'ورود'; b.onclick = () => connect(() => send({ t: 'join', name: 'مدیر', code: x.code, key: AK(), ghost: true }));
+      d.append(a, b); box.append(d);
+    });
+  } catch { toast('خطا؛ دوباره وارد حالت مدیر شو'); }
+}
+showAdm();
 applyTheme(); checkVip(); claimRef(); resume();
 </script>
 </body>

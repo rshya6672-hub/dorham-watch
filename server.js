@@ -19,7 +19,7 @@ const code = () => { let c; do c = String(Math.floor(1000 + Math.random() * 9000
 app.get('/api/ranking', (q, r) =>
   r.json(Object.entries(db.scores).map(([name, pts]) => ({ name, pts })).sort((a, b) => b.pts - a.pts).slice(0, 50)));
 app.get('/api/lobbies', (q, r) =>
-  r.json(Object.values(rooms).filter(x => x.type === 'public' && x.members.size).map(x => ({ code: x.code, title: x.title, count: x.members.size }))));
+  r.json(Object.values(rooms).filter(x => x.type === 'public' && x.members.size).map(x => ({ code: x.code, title: x.title, count: names(x).length }))));
 app.post('/api/support', (q, r) => {
   db.support.push({ name: String(q.body.name || '').slice(0, 40), text: String(q.body.text || '').slice(0, 1000), t: Date.now() });
   save(); r.json({ ok: 1 });
@@ -28,7 +28,7 @@ app.post('/api/support', (q, r) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-const names = rm => [...rm.members.values()];
+const names = rm => [...rm.members].filter(([w]) => !w.ghost).map(([, n]) => n);
 const bcast = (rm, msg, except) => rm.members.forEach((n, w) => { if (w !== except && w.readyState === 1) w.send(JSON.stringify(msg)); });
 const curTime = s => s.time + (s.playing ? (Date.now() - s.at) / 1000 : 0);
 
@@ -37,6 +37,7 @@ const chatPush = (rm, msg) => { (rm.chat = rm.chat || []).push(msg); if (rm.chat
 
 function leave(ws) {
   const rm = rooms[ws.room]; if (!rm) return;
+  if (rm.callers && rm.callers.delete(ws)) bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws);
   rm.members.delete(ws); ws.room = null;
   if (!rm.members.size) rm.emptyAt = Date.now();
   else bcast(rm, { t: 'members', members: names(rm) });
@@ -49,6 +50,7 @@ wss.on('connection', ws => {
     const rm = rooms[ws.room];
     if (m.t === 'create' || m.t === 'join') {
       leave(ws);
+      ws.ghost = m.t === 'join' && !!(m.ghost && ADMIN_KEY && m.key && same(String(m.key), ADMIN_KEY));
       let r;
       if (m.t === 'create') {
         const c = code();
@@ -58,15 +60,26 @@ wss.on('connection', ws => {
         if (!r) return ws.send(JSON.stringify({ t: 'error', msg: 'لابی‌ای با این کد پیدا نشد' }));
       }
       const nm = String(m.name).slice(0, 20);
-      r.members.forEach((n, w) => { if (n === nm && w !== ws) { r.members.delete(w); w.room = null; try { w.close(); } catch {} } });
+      r.members.forEach((n, w) => { if (!ws.ghost && !w.ghost && n === nm && w !== ws) { r.members.delete(w); w.room = null; try { w.close(); } catch {} } });
       r.emptyAt = 0;
       ws.room = r.code; r.members.set(ws, String(m.name).slice(0, 20));
       const tok = crypto.randomBytes(8).toString('hex'); upToks[tok] = { code: r.code, name: String(m.name).slice(0, 20) };
-      ws.send(JSON.stringify({ t: 'joined', tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [] }));
-      bcast(r, { t: 'members', members: names(r) }, ws);
-      if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; save(); }
+      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [] }));
+      if (!ws.ghost) {
+        bcast(r, { t: 'members', members: names(r) }, ws);
+        if (!db.users[nm]) { db.users[nm] = Date.now(); save(); }
+      }
+      if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; db.stats.lobbies++; save(); }
     } else if (rm) {
       if (m.t === 'media') { rm.media = String(m.url); rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
+      else if (m.t === 'callon') {
+        rm.callers = rm.callers || new Set();
+        const others = [...rm.callers].filter(w => w !== ws).map(w => rm.members.get(w));
+        rm.callers.add(ws);
+        ws.send(JSON.stringify({ t: 'callers', list: others }));
+        bcast(rm, { t: 'callon', name: rm.members.get(ws) }, ws);
+      } else if (m.t === 'calloff') { if (rm.callers && rm.callers.delete(ws)) bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws); }
+      else if (m.t === 'rtc') { rm.members.forEach((n, w) => { if (n === m.to && w.readyState === 1) w.send(JSON.stringify({ t: 'rtc', from: rm.members.get(ws), data: m.data })); }); }
       else if (['play', 'pause', 'seek'].includes(m.t)) {
         const time = Number(m.time) || 0;
         rm.state = { playing: m.t === 'play' ? true : m.t === 'pause' ? false : rm.state.playing, time, at: Date.now() };
@@ -137,7 +150,7 @@ const sign = s => crypto.createHmac('sha256', ADMIN_KEY).update(s).digest('hex')
 const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const tokExp = t => { const [e, sg] = String(t || '').split('.'); return e && sg && same(sg, sign('t' + e)) ? Number(e) : 0; };
 const fails = {};
-db.used = db.used || {};
+db.used = db.used || {}; db.users = db.users || {}; db.stats = db.stats || { lobbies: 0 };
 
 app.get('/api/vip/plans', (q, r) => r.json({ plans: PLANS, pay: PAY_INFO }));
 app.get('/api/vip/check', (q, r) => {
@@ -163,6 +176,16 @@ app.post('/api/admin/gen', (q, r) => {
   if (!admin(q, r)) return;
   const d = Math.max(1, Math.min(3650, Number(q.body.days) || 30)), n = crypto.randomBytes(3).toString('hex');
   r.json({ code: `${d}-${n}-${sign(d + '-' + n)}` });
+});
+app.get('/api/ice', (q, r) => {
+  const s = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+  if (process.env.TURN_URL) s.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+  r.json(s);
+});
+app.get('/api/admin/stats', (q, r) => {
+  if (!admin(q, r)) return;
+  r.json({ users: Object.keys(db.users).length, lobbiesTotal: db.stats.lobbies, online: wss.clients.size, vipCodesUsed: Object.keys(db.used).length,
+    rooms: Object.values(rooms).map(x => ({ code: x.code, title: x.title, type: x.type, count: names(x).length, members: names(x) })) });
 });
 app.get('/api/admin/support', (q, r) => { if (admin(q, r)) r.json(db.support.slice(-50).reverse()); });
 
