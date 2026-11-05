@@ -123,6 +123,9 @@ body.ubg .bg{display:none}
   <video id="v" controls playsinline></video>
   <input id="murl" placeholder="لینک مستقیم ویدیو یا موزیک (mp4 / mp3 / webm)" dir="ltr">
   <button class="btn alt" onclick="setMedia()">پخش برای همه</button>
+  <input id="lfile" type="file" accept="video/*,audio/*" hidden onchange="useLocal(this.files[0])">
+  <button class="btn" onclick="document.querySelector('#lfile').click()">⚡ پخش از فایل خودم (بدون آپلود، فوری)</button>
+  <p class="pre" id="lmsg" hidden></p>
   <input id="mfile" type="file" accept="video/*,audio/*" hidden onchange="upFile(this.files[0])">
   <button class="btn" onclick="document.querySelector('#mfile').click()">📁 انتخاب فیلم از گالری</button>
   <div id="upst" style="color:var(--mu);margin:0 0 10px;text-align:center"></div>
@@ -231,38 +234,61 @@ function retry() {
 const resume = () => { if (localStorage.room && me && !(ws && ws.readyState === 1)) { ws = null; connect(() => send({ t: 'join', name: me, code: localStorage.room })); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resume(); });
 addEventListener('online', resume);
-function leaveRoom() { endCall(); localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
+function leaveRoom() { endCall(); send({ t: 'leave' }); localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
 
 const v = $('#v');
 const remote = fn => { applying = true; fn(); setTimeout(() => applying = false, 400); };
 v.onplay = () => !applying && send({ t: 'play', time: v.currentTime });
 v.onpause = () => !applying && send({ t: 'pause', time: v.currentTime });
 v.onseeked = () => !applying && send({ t: 'seek', time: v.currentTime });
-function upFile(f) {
+async function upFile(f) {
   if (!f) return;
-  const x = new XMLHttpRequest();
-  x.open('POST', '/upload?tok=' + tok);
-  x.setRequestHeader('X-Ext', (f.name.split('.').pop() || 'mp4').toLowerCase());
-  x.upload.onprogress = e => $('#upst').textContent = 'در حال آپلود... ' + Math.round(e.loaded / e.total * 100) + '٪';
-  x.onload = () => $('#upst').textContent = x.status === 200 ? 'آپلود شد ✅' : 'خطا در آپلود (' + x.status + ')';
-  x.onerror = () => $('#upst').textContent = 'خطا در آپلود';
-  x.send(f);
+  const ext = (f.name.split('.').pop() || 'mp4').toLowerCase(), CH = 8 * 1024 * 1024, n = Math.ceil(f.size / CH), prog = new Array(n).fill(0), t0 = Date.now();
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('');
+  let next = 0, failed = false;
+  const upd = () => { const b = prog.reduce((a, c) => a + c, 0), sp = b / ((Date.now() - t0) / 1000 || 1); $('#upst').textContent = `در حال آپلود... ${Math.round(b / f.size * 100)}٪ — ${(sp / 1048576).toFixed(1)} مگابایت بر ثانیه`; };
+  const sendChunk = i => new Promise((ok, bad) => {
+    const x = new XMLHttpRequest(); x.open('POST', `/upload-chunk?tok=${tok}&id=${id}&i=${i}&n=${n}&ch=${CH}&size=${f.size}`);
+    x.setRequestHeader('X-Ext', ext);
+    x.upload.onprogress = e => { prog[i] = e.loaded; upd(); };
+    x.onload = () => { if (x.status === 200) { prog[i] = Math.min(CH, f.size - i * CH); upd(); ok(); } else bad(); };
+    x.onerror = x.ontimeout = bad; x.send(f.slice(i * CH, Math.min(f.size, (i + 1) * CH)));
+  });
+  const worker = async () => {
+    while (!failed) {
+      const i = next++; if (i >= n) return;
+      for (let a = 0; ; a++) { try { await sendChunk(i); break; } catch (e) { prog[i] = 0; if (a >= 5) { failed = true; throw e; } await new Promise(r => setTimeout(r, 1000 * (a + 1))); } }
+    }
+  };
+  $('#upst').textContent = 'شروع آپلود...';
+  try { await Promise.all(Array.from({ length: Math.min(4, n) }, worker)); $('#upst').textContent = 'آپلود شد ✅'; }
+  catch { $('#upst').textContent = 'خطا در آپلود؛ اینترنت را چک کن و دوباره امتحان کن'; }
 }
+// پخش از فایل خودِ هر نفر (بدون آپلود)
+let lmeta = null;
+function useLocal(f) {
+  if (!f) return; v.src = URL.createObjectURL(f); $('#lmsg').hidden = true;
+  if (lmeta && f.size === lmeta.size) return toast('فایل همان است ✅');
+  lmeta = { name: f.name, size: f.size }; send({ t: 'localmedia', name: f.name, size: f.size });
+  $('#upst').textContent = 'به بقیه اطلاع داده شد؛ آن‌ها باید همین فایل را از گالری خودشان انتخاب کنند.';
+}
+function showLocalMsg(m) { lmeta = { name: m.name, size: m.size }; const el = $('#lmsg'); el.hidden = false; el.textContent = `📽 «${m.name}» (${Math.round(m.size / 1048576)} مگابایت) — همین فایل را با دکمه‌ی «پخش از فایل خودم» از گالری انتخاب کن.`; }
 const setMedia = () => $('#murl').value && send({ t: 'media', url: $('#murl').value.trim() });
 
 function handle(m) {
   if (m.t === 'error') { toast(m.msg); localStorage.removeItem('room'); if (inRoom) { inRoom = false; go('home'); } }
   else if (m.t === 'joined') {
     inRoom = true; tok = m.tok; if (!m.ghost) localStorage.room = m.code; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = ''; (m.chat || []).forEach(addChat);
-    members(m.members);
-    if (m.media) { v.src = m.media; v.onloadedmetadata = () => remote(() => { v.currentTime = m.time; if (m.playing) v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); }); }
+    members(m.members); if (m.local) showLocalMsg(m.local);
+    if (m.media) { lmeta = null; $('#lmsg').hidden = true; v.src = m.media; v.onloadedmetadata = () => remote(() => { v.currentTime = m.time; if (m.playing) v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); }); }
   }
+  else if (m.t === 'localmedia') showLocalMsg(m)
   else if (m.t === 'callers') (m.list || []).forEach(callPeer);
   else if (m.t === 'callon') { if (localStream) toast(m.name + ' به تماس پیوست'); }
   else if (m.t === 'calloff') dropPeer(m.name);
   else if (m.t === 'rtc') onRtc(m);
   else if (m.t === 'members') members(m.members);
-  else if (m.t === 'media') { v.src = m.url; $('#murl').value = m.url; }
+  else if (m.t === 'media') { lmeta = null; $('#lmsg').hidden = true; v.src = m.url; $('#murl').value = m.url; }
   else if (m.t === 'play') remote(() => { v.currentTime = m.time; v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); });
   else if (m.t === 'pause') remote(() => { v.currentTime = m.time; v.pause(); });
   else if (m.t === 'seek') remote(() => v.currentTime = m.time);
@@ -471,6 +497,10 @@ const showAdm = () => { $('#admcard').hidden = !AK(); };
 async function admFetch() { const r = await fetch('/api/admin/stats', { headers: { 'x-key': AK() } }); if (!r.ok) throw 0; return r.json(); }
 async function admLogin() { localStorage.adm = $('#akey').value.trim(); $('#akey').value = ''; try { await admFetch(); showAdm(); toast('وارد حالت مدیر شدی'); go('adm'); } catch { localStorage.removeItem('adm'); toast('رمز اشتباه است'); } }
 function admOut() { localStorage.removeItem('adm'); showAdm(); go('home'); }
+function admJoin(c) {
+  if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; inRoom = false; }
+  toast('در حال ورود...'); connect(() => send({ t: 'join', name: 'مدیر', code: c, key: AK(), ghost: true }));
+}
 async function loadAdm() {
   try {
     const s = await admFetch();
@@ -479,7 +509,7 @@ async function loadAdm() {
     s.rooms.forEach(x => {
       const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('button'); d.className = 'row';
       a.textContent = `${x.code} ${x.type === 'private' ? '🔒' : '🌐'} ${x.count} نفر` + (x.members.length ? ' (' + x.members.join('، ') + ')' : '');
-      b.className = 'btn'; b.style.cssText = 'width:auto;margin:0;padding:8px 16px'; b.textContent = 'ورود'; b.onclick = () => connect(() => send({ t: 'join', name: 'مدیر', code: x.code, key: AK(), ghost: true }));
+      b.className = 'btn'; b.style.cssText = 'width:auto;margin:0;padding:8px 16px'; b.textContent = 'ورود'; b.onclick = () => admJoin(x.code);
       d.append(a, b); box.append(d);
     });
   } catch { toast('خطا؛ دوباره وارد حالت مدیر شو'); }

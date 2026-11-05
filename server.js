@@ -26,20 +26,21 @@ app.post('/api/support', (q, r) => {
 });
 
 const server = http.createServer(app);
+server.requestTimeout = 0; // آپلودهای طولانی نباید قطع شوند
 const wss = new WebSocketServer({ server });
 
 const names = rm => [...rm.members].filter(([w]) => !w.ghost).map(([, n]) => n);
 const bcast = (rm, msg, except) => rm.members.forEach((n, w) => { if (w !== except && w.readyState === 1) w.send(JSON.stringify(msg)); });
 const curTime = s => s.time + (s.playing ? (Date.now() - s.at) / 1000 : 0);
 
-const GRACE = 6 * 3600 * 1000; // لابی خالی تا ۶ ساعت باز می‌ماند
+const GRACE = 10 * 60 * 1000; // لابی خالی (بدون خروج دستی) تا ۱۰ دقیقه می‌ماند؛ با «خروج» آخرین نفر فوراً حذف می‌شود
 const chatPush = (rm, msg) => { (rm.chat = rm.chat || []).push(msg); if (rm.chat.length > 40) rm.chat.shift(); bcast(rm, msg); };
 
-function leave(ws) {
+function leave(ws, final) {
   const rm = rooms[ws.room]; if (!rm) return;
   if (rm.callers && rm.callers.delete(ws)) bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws);
   rm.members.delete(ws); ws.room = null;
-  if (!rm.members.size) rm.emptyAt = Date.now();
+  if (!names(rm).length) { if (final && !ws.ghost) delete rooms[rm.code]; else rm.emptyAt = rm.emptyAt || Date.now(); }
   else bcast(rm, { t: 'members', members: names(rm) });
 }
 
@@ -61,17 +62,22 @@ wss.on('connection', ws => {
       }
       const nm = String(m.name).slice(0, 20);
       r.members.forEach((n, w) => { if (!ws.ghost && !w.ghost && n === nm && w !== ws) { r.members.delete(w); w.room = null; try { w.close(); } catch {} } });
-      r.emptyAt = 0;
+      if (!ws.ghost) r.emptyAt = 0;
       ws.room = r.code; r.members.set(ws, String(m.name).slice(0, 20));
       const tok = crypto.randomBytes(8).toString('hex'); upToks[tok] = { code: r.code, name: String(m.name).slice(0, 20) };
-      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [] }));
+      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null }));
       if (!ws.ghost) {
         bcast(r, { t: 'members', members: names(r) }, ws);
         if (!db.users[nm]) { db.users[nm] = Date.now(); save(); }
       }
       if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; db.stats.lobbies++; save(); }
     } else if (rm) {
-      if (m.t === 'media') { rm.media = String(m.url); rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
+      if (m.t === 'leave') leave(ws, true);
+      else if (m.t === 'localmedia') {
+        rm.local = { name: String(m.name || '').slice(0, 120), size: Number(m.size) || 0 }; rm.media = ''; rm.state = { playing: false, time: 0, at: Date.now() };
+        bcast(rm, { t: 'localmedia', ...rm.local, by: rm.members.get(ws) }, ws);
+      }
+      else if (m.t === 'media') { rm.local = null; rm.media = String(m.url); rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
       else if (m.t === 'callon') {
         rm.callers = rm.callers || new Set();
         const others = [...rm.callers].filter(w => w !== ws).map(w => rm.members.get(w));
@@ -92,7 +98,7 @@ wss.on('connection', ws => {
 
 setInterval(() => {
   wss.clients.forEach(w => { if (!w.alive) return w.terminate(); w.alive = false; try { w.ping(); } catch {} });
-  Object.values(rooms).forEach(rm => { if (!rm.members.size && rm.emptyAt && Date.now() - rm.emptyAt > GRACE) delete rooms[rm.code]; });
+  Object.values(rooms).forEach(rm => { if (!names(rm).length && rm.emptyAt && Date.now() - rm.emptyAt > GRACE) delete rooms[rm.code]; });
 }, 30000);
 
 // هر دقیقه برای کسی که در حال تماشاست ۱ امتیاز
@@ -117,6 +123,33 @@ app.post('/upload', (req, res) => {
     res.json({ ok: 1 });
   });
   req.on('aborted', () => { out.destroy(); fs.unlink('uploads/' + name, () => {}); });
+});
+
+// آپلود تکه‌ای و موازی (سریع‌تر و قابل تکرار برای فایل‌های بزرگ)
+const EXTS = ['mp4', 'webm', 'mov', 'm4v', 'mp3', 'm4a', 'ogg', 'wav', 'mkv'];
+const parts = {};
+app.post('/upload-chunk', (req, res) => {
+  const code = (upToks[req.query.tok] || {}).code, rm = rooms[code];
+  if (!rm) return res.status(403).end('forbidden');
+  const id = String(req.query.id || ''), i = +req.query.i, n = +req.query.n, ch = +req.query.ch, size = +req.query.size;
+  const ext = (String(req.headers['x-ext'] || '').toLowerCase().match(/^[a-z0-9]{2,4}$/) || [''])[0];
+  if (!/^[a-f0-9]{16}$/.test(id) || !EXTS.includes(ext) || !(n >= 1 && n <= 4096) || !(i >= 0 && i < n) || !(ch >= 1e6 && ch <= 16e6) || !(size > 0 && size <= 4e9) || Math.ceil(size / ch) !== n) return res.status(400).end('bad');
+  if (+req.headers['content-length'] > ch) return res.status(413).end();
+  const p = parts[id] = parts[id] || { got: new Set(), done: false, name: crypto.randomBytes(8).toString('hex') + '.' + ext };
+  const path = 'uploads/part_' + id, want = Math.min(ch, size - i * ch);
+  if (!fs.existsSync(path)) fs.closeSync(fs.openSync(path, 'a'));
+  const out = fs.createWriteStream(path, { flags: 'r+', start: i * ch });
+  req.pipe(out);
+  out.on('finish', () => {
+    if (out.bytesWritten !== want) return res.status(400).end('short');
+    p.got.add(i);
+    if (p.got.size === n && !p.done && fs.statSync(path).size === size) {
+      p.done = true; fs.renameSync(path, 'uploads/' + p.name); delete parts[id];
+      if (rooms[code]) { rm.local = null; rm.media = '/media/' + p.name; rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
+    }
+    res.json({ ok: 1 });
+  });
+  req.on('aborted', () => out.destroy());
 });
 // پیام صوتی داخل چت لابی
 app.post('/voice', (req, res) => {
