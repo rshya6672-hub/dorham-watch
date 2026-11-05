@@ -19,7 +19,7 @@ const code = () => { let c; do c = String(Math.floor(1000 + Math.random() * 9000
 app.get('/api/ranking', (q, r) =>
   r.json(Object.entries(db.scores).map(([name, pts]) => ({ name, pts })).sort((a, b) => b.pts - a.pts).slice(0, 50)));
 app.get('/api/lobbies', (q, r) =>
-  r.json(Object.values(rooms).filter(x => x.type === 'public').map(x => ({ code: x.code, title: x.title, count: x.members.size }))));
+  r.json(Object.values(rooms).filter(x => x.type === 'public' && x.members.size).map(x => ({ code: x.code, title: x.title, count: x.members.size }))));
 app.post('/api/support', (q, r) => {
   db.support.push({ name: String(q.body.name || '').slice(0, 40), text: String(q.body.text || '').slice(0, 1000), t: Date.now() });
   save(); r.json({ ok: 1 });
@@ -32,14 +32,18 @@ const names = rm => [...rm.members.values()];
 const bcast = (rm, msg, except) => rm.members.forEach((n, w) => { if (w !== except && w.readyState === 1) w.send(JSON.stringify(msg)); });
 const curTime = s => s.time + (s.playing ? (Date.now() - s.at) / 1000 : 0);
 
+const GRACE = 6 * 3600 * 1000; // لابی خالی تا ۶ ساعت باز می‌ماند
+const chatPush = (rm, msg) => { (rm.chat = rm.chat || []).push(msg); if (rm.chat.length > 40) rm.chat.shift(); bcast(rm, msg); };
+
 function leave(ws) {
   const rm = rooms[ws.room]; if (!rm) return;
   rm.members.delete(ws); ws.room = null;
-  if (!rm.members.size) delete rooms[rm.code];
+  if (!rm.members.size) rm.emptyAt = Date.now();
   else bcast(rm, { t: 'members', members: names(rm) });
 }
 
 wss.on('connection', ws => {
+  ws.alive = true; ws.on('pong', () => { ws.alive = true; });
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     const rm = rooms[ws.room];
@@ -48,14 +52,17 @@ wss.on('connection', ws => {
       let r;
       if (m.t === 'create') {
         const c = code();
-        r = rooms[c] = { code: c, type: m.type === 'private' ? 'private' : 'public', title: `لابی ${String(m.name).slice(0, 20)}`, media: '', state: { playing: false, time: 0, at: Date.now() }, members: new Map() };
+        r = rooms[c] = { code: c, type: m.type === 'private' ? 'private' : 'public', title: `لابی ${String(m.name).slice(0, 20)}`, media: '', state: { playing: false, time: 0, at: Date.now() }, members: new Map(), chat: [], emptyAt: 0 };
       } else {
         r = rooms[m.code];
         if (!r) return ws.send(JSON.stringify({ t: 'error', msg: 'لابی‌ای با این کد پیدا نشد' }));
       }
+      const nm = String(m.name).slice(0, 20);
+      r.members.forEach((n, w) => { if (n === nm && w !== ws) { r.members.delete(w); w.room = null; try { w.close(); } catch {} } });
+      r.emptyAt = 0;
       ws.room = r.code; r.members.set(ws, String(m.name).slice(0, 20));
       const tok = crypto.randomBytes(8).toString('hex'); upToks[tok] = { code: r.code, name: String(m.name).slice(0, 20) };
-      ws.send(JSON.stringify({ t: 'joined', tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r) }));
+      ws.send(JSON.stringify({ t: 'joined', tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [] }));
       bcast(r, { t: 'members', members: names(r) }, ws);
       if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; save(); }
     } else if (rm) {
@@ -64,11 +71,16 @@ wss.on('connection', ws => {
         const time = Number(m.time) || 0;
         rm.state = { playing: m.t === 'play' ? true : m.t === 'pause' ? false : rm.state.playing, time, at: Date.now() };
         bcast(rm, { t: m.t, time }, ws);
-      } else if (m.t === 'chat') bcast(rm, { t: 'chat', name: rm.members.get(ws), text: String(m.text).slice(0, 300) });
+      } else if (m.t === 'chat') chatPush(rm, { t: 'chat', name: rm.members.get(ws), text: String(m.text).slice(0, 300) });
     }
   });
   ws.on('close', () => leave(ws));
 });
+
+setInterval(() => {
+  wss.clients.forEach(w => { if (!w.alive) return w.terminate(); w.alive = false; try { w.ping(); } catch {} });
+  Object.values(rooms).forEach(rm => { if (!rm.members.size && rm.emptyAt && Date.now() - rm.emptyAt > GRACE) delete rooms[rm.code]; });
+}, 30000);
 
 // هر دقیقه برای کسی که در حال تماشاست ۱ امتیاز
 setInterval(() => {
@@ -104,7 +116,7 @@ app.post('/voice', (req, res) => {
   let n = 0, bad = false;
   req.on('data', d => { n += d.length; if (n > 8e6 && !bad) { bad = true; req.destroy(); out.destroy(); fs.unlink('uploads/' + name, () => {}); } });
   req.pipe(out);
-  out.on('finish', () => { if (bad) return; bcast(rm, { t: 'chat', name: u.name, text: '🎤', voice: '/media/' + name, dur }); res.json({ ok: 1 }); });
+  out.on('finish', () => { if (bad) return; chatPush(rm, { t: 'chat', name: u.name, text: '🎤', voice: '/media/' + name, dur }); res.json({ ok: 1 }); });
 });
 // پاک کردن فایل‌های قدیمی‌تر از ۱۲ ساعت
 setInterval(() => fs.readdirSync('uploads').forEach(f => {

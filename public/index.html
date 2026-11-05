@@ -193,11 +193,21 @@ function connect(cb) {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
   ws.onopen = cb;
   ws.onmessage = e => handle(JSON.parse(e.data));
-  ws.onclose = () => { if (inRoom) { inRoom = false; toast('اتصال قطع شد'); go('home'); } };
+  ws.onclose = () => { if (inRoom) { toast('اتصال قطع شد؛ در حال اتصال مجدد...'); retry(); } };
 }
 const createLobby = () => needName() && connect(() => send({ t: 'create', name: me, type: $('#ltype').value }));
 const joinLobby = c => needName() && connect(() => send({ t: 'join', name: me, code: String(c).trim() }));
-function leaveRoom() { if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
+// ===== بازگشت خودکار به لابی =====
+let retryT = 0;
+function retry() {
+  clearTimeout(retryT);
+  const c = localStorage.room; if (!c || !me) return;
+  retryT = setTimeout(() => { if (ws && ws.readyState === 1) return; ws = null; connect(() => send({ t: 'join', name: me, code: c })); if (ws) ws.onerror = () => {}; }, 2000);
+}
+const resume = () => { if (localStorage.room && me && !(ws && ws.readyState === 1)) { ws = null; connect(() => send({ t: 'join', name: me, code: localStorage.room })); } };
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resume(); });
+addEventListener('online', resume);
+function leaveRoom() { localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
 
 const v = $('#v');
 const remote = fn => { applying = true; fn(); setTimeout(() => applying = false, 400); };
@@ -217,9 +227,9 @@ function upFile(f) {
 const setMedia = () => $('#murl').value && send({ t: 'media', url: $('#murl').value.trim() });
 
 function handle(m) {
-  if (m.t === 'error') toast(m.msg);
+  if (m.t === 'error') { toast(m.msg); localStorage.removeItem('room'); if (inRoom) { inRoom = false; go('home'); } }
   else if (m.t === 'joined') {
-    inRoom = true; tok = m.tok; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = '';
+    inRoom = true; tok = m.tok; localStorage.room = m.code; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = ''; (m.chat || []).forEach(addChat);
     members(m.members);
     if (m.media) { v.src = m.media; v.onloadedmetadata = () => remote(() => { v.currentTime = m.time; if (m.playing) v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); }); }
   }
@@ -370,7 +380,7 @@ async function shareApp() {
   if (navigator.share) try { await navigator.share(d); return; } catch { return; }
   try { await navigator.clipboard.writeText(`${d.text}\n${d.url}`); toast('لینک کپی شد'); } catch { toast('لینک را از کادر کپی کن'); }
 }
-applyTheme(); checkVip(); claimRef();
+applyTheme(); checkVip(); claimRef(); resume();
 </script>
 </body>
 </html>
