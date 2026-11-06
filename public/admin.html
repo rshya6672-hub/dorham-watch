@@ -5,10 +5,12 @@
 <select id=d style="width:100%;padding:12px;margin:6px 0"><option value=30>ماهانه (۳۰ روز)<option value=90>سه‌ماهه (۹۰ روز)<option value=365>سالانه (۳۶۵ روز)</select>
 <button onclick=gen() style="width:100%;padding:12px;margin:6px 0">ساخت کد</button>
 <div id=o style="font-size:22px;direction:ltr;text-align:center;margin:10px;user-select:all"></div>
+<button onclick=cds() style="width:100%;padding:12px;margin:6px 0">کدهای ورود در انتظار (هر ۵ ثانیه خودکار)</button><div id=c style="font-size:20px;direction:ltr;margin:8px 0;white-space:pre-line"></div>
 <button onclick=sup() style="width:100%;padding:12px;margin:6px 0">پیام‌های پشتیبانی</button><div id=s></div>
 <script>
 const H=()=>({'x-key':k.value,'Content-Type':'application/json'});
 async function gen(){const r=await fetch('/api/admin/gen',{method:'POST',headers:H(),body:JSON.stringify({days:d.value})});const j=await r.json();o.textContent=j.code||j.err}
+let ct;async function cds(){clearInterval(ct);const f=async()=>{const r=await fetch('/api/admin/codes',{headers:H()});const j=await r.json();c.textContent=Array.isArray(j)?(j.length?j.map(x=>x.phone+'  ->  '+x.code).join('\n'):'کدی در انتظار نیست'):j.err};await f();ct=setInterval(f,5000)}
 async function sup(){const r=await fetch('/api/admin/support',{headers:H()});const j=await r.json();s.innerHTML=Array.isArray(j)?j.map(m=>'<p><b></b> '+'</p>').join(''):j.err;
  if(Array.isArray(j)){s.textContent='';j.forEach(m=>{const p=document.createElement('p');p.textContent=m.name+': '+m.text;s.append(p)})}}
 </script></body></html>
