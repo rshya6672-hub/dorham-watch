@@ -237,28 +237,44 @@ const normPhone = x => { let d = en(x).replace(/\D/g, ''); if (d.startsWith('009
 const sessTok = (h, u, n) => mk({ k: 's', h, u, n, exp: Date.now() + 18144e6 });
 const bad = (r, c, err) => r.status(c).json({ err });
 
+const normEmail = x => { const e = String(x || '').trim().toLowerCase(); return e.length <= 100 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) ? e : ''; };
+const idOf = b => { const p = normPhone(b.phone); if (p) return { kind: 'p', id: p }; const e = normEmail(b.email); return e ? { kind: 'e', id: e } : null; };
+const idHash = x => crypto.createHmac('sha256', ADMIN_KEY).update((x.kind === 'p' ? 'ph:' : 'em:') + x.id).digest('hex').slice(0, 24);
+const sendMail = async (to, code) => {
+  const x = await fetch('https://api.brevo.com/v3/smtp/email', { method: 'POST', signal: AbortSignal.timeout(10000),
+    headers: { 'api-key': process.env.BREVO_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ sender: { name: process.env.MAIL_NAME || 'Dor Ham', email: process.env.MAIL_FROM }, to: [{ email: to }], subject: 'کد ورود به دورهم',
+      htmlContent: `<div dir="rtl" style="font-family:Tahoma,sans-serif;text-align:right"><p>کد ورود شما به دورهم:</p><p style="font-size:30px;letter-spacing:6px;font-weight:bold;direction:ltr;text-align:center">${code}</p><p>این کد تا ۵ دقیقه معتبر است. آن را با هیچ‌کس در میان نگذارید.</p></div>` }) });
+  return x.ok;
+};
 app.post('/api/auth/send', async (q, r) => {
   if (!ADMIN_KEY) return bad(r, 503, 'سرور هنوز تنظیم نشده');
-  const ph = normPhone(q.body.phone); if (!ph) return bad(r, 400, 'شماره موبایل معتبر نیست');
-  const k = 'a' + q.ip + Math.floor(Date.now() / 3600000);
+  const x = idOf(q.body); if (!x) return bad(r, 400, String(q.body.email || '').trim() ? 'ایمیل معتبر نیست' : 'شماره موبایل معتبر نیست');
+  if (x.kind === 'e' && !(process.env.BREVO_KEY && process.env.MAIL_FROM)) return bad(r, 503, 'ورود با ایمیل هنوز راه‌اندازی نشده');
+  const k = 'a' + q.ip + Math.floor(Date.now() / 3600000), key = x.kind + x.id;
   if ((fails[k] = (fails[k] || 0) + 1) > 8) return bad(r, 429, 'تلاش زیاد؛ بعداً دوباره امتحان کن');
-  if (pend[ph] && Date.now() - pend[ph].at < 60000) return bad(r, 429, 'کمی صبر کن و دوباره بخواه');
+  if (pend[key] && Date.now() - pend[key].at < 60000) return bad(r, 429, 'کمی صبر کن و دوباره بخواه');
   const code = String(crypto.randomInt(10000, 100000));
-  pend[ph] = { h: hm('c' + ph + code), exp: Date.now() + 300000, tries: 0, at: Date.now() };
+  pend[key] = { h: hm('c' + key + code), exp: Date.now() + 300000, tries: 0, at: Date.now() };
+  if (x.kind === 'e') { // کد ایمیل محرمانه است: فقط به ایمیل می‌رود و هیچ‌جا (حتی پنل مدیر) دیده نمی‌شود
+    let ok = false; try { ok = await sendMail(x.id, code); } catch {}
+    if (!ok) { delete pend[key]; return bad(r, 502, 'ارسال ایمیل ناموفق بود؛ دوباره امتحان کن'); }
+    return r.json({ ok: 1, manual: false, email: true });
+  }
   let sent = false;
   if (process.env.KAVENEGAR_KEY && process.env.KAVENEGAR_TEMPLATE) {
-    try { const x = await fetch(`https://api.kavenegar.com/v1/${process.env.KAVENEGAR_KEY}/verify/lookup.json?receptor=${ph}&token=${code}&template=${encodeURIComponent(process.env.KAVENEGAR_TEMPLATE)}`, { signal: AbortSignal.timeout(8000) }); sent = x.ok; } catch {}
+    try { const y = await fetch(`https://api.kavenegar.com/v1/${process.env.KAVENEGAR_KEY}/verify/lookup.json?receptor=${x.id}&token=${code}&template=${encodeURIComponent(process.env.KAVENEGAR_TEMPLATE)}`, { signal: AbortSignal.timeout(8000) }); sent = y.ok; } catch {}
   }
-  if (!sent) { adminCodes.push({ phone: ph, code, at: Date.now() }); if (adminCodes.length > 30) adminCodes.shift(); }
+  if (!sent) { adminCodes.push({ phone: x.id, code, at: Date.now() }); if (adminCodes.length > 30) adminCodes.shift(); }
   r.json({ ok: 1, manual: !sent });
 });
 app.post('/api/auth/verify', (q, r) => {
-  const ph = normPhone(q.body.phone), code = en(q.body.code).replace(/\D/g, ''), p = pend[ph];
-  if (!ph || !p || p.exp < Date.now()) return bad(r, 400, 'کد منقضی شده؛ دوباره بخواه');
-  if (++p.tries > 5) { delete pend[ph]; return bad(r, 429, 'تلاش زیاد؛ کد جدید بخواه'); }
-  if (!same(p.h, hm('c' + ph + code))) return bad(r, 400, 'کد اشتباه است');
-  delete pend[ph];
-  const h = phoneHash(ph), a = db.accounts[h];
+  const x = idOf(q.body), code = en(q.body.code).replace(/\D/g, ''), key = x && x.kind + x.id, p = key && pend[key];
+  if (!x || !p || p.exp < Date.now()) return bad(r, 400, 'کد منقضی شده؛ دوباره بخواه');
+  if (++p.tries > 5) { delete pend[key]; return bad(r, 429, 'تلاش زیاد؛ کد جدید بخواه'); }
+  if (!same(p.h, hm('c' + key + code))) return bad(r, 400, 'کد اشتباه است');
+  delete pend[key];
+  const h = idHash(x), a = db.accounts[h];
   if (a) return r.json({ token: sessTok(h, a.u, a.n), u: a.u, n: a.n });
   r.json({ vtoken: mk({ k: 'v', h, exp: Date.now() + 900000 }) });
 });
