@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07070a">
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json?v=2">
+<link rel="icon" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icon-192.png?v=2">
 <title>Dor Ham</title>
 <meta property="og:title" content="Dor Ham - تماشای گروهی فیلم و موزیک">
 <meta property="og:description" content="با دوستانت همزمان فیلم ببین و چت کن 🎬">
-<meta property="og:image" content="https://dorham-watch.onrender.com/icon-512.png">
+<meta property="og:image" content="https://dorham-watch.onrender.com/icon-512.png?v=2">
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#07070a;--tx:#f7eef0;--mu:#ad9aa1;--red:#e11d2e;--red2:#ff4558;--glass:rgba(255,255,255,.07);--gb:rgba(255,255,255,.15);--dk:#a30015;--b1:#c1121f;--b2:#7a0010;--glow:rgba(225,29,46,.5);--c1:rgba(255,69,88,.75);--c2:rgba(150,0,20,.7)}
@@ -27,7 +27,7 @@ body{background:var(--bg);color:var(--tx);font-family:Vazirmatn,Tahoma,sans-seri
 .view[hidden]{display:none}
 h1{font-size:40px;font-weight:800;text-align:center;margin:8px 0 4px}
 .brand{background:linear-gradient(90deg,#fff,var(--red2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.logo{width:110px;height:110px;border-radius:50%;object-fit:cover;display:block;margin:26px auto 6px;border:2px solid var(--gb);box-shadow:0 0 40px var(--glow)}
+.logo{width:110px;height:110px;border-radius:28px;object-fit:cover;display:block;margin:26px auto 6px;border:2px solid var(--gb);box-shadow:0 0 40px var(--glow)}
 .sub{color:var(--mu);text-align:center;margin-bottom:30px}
 .card{display:flex;align-items:center;gap:14px;width:100%;border-radius:28px;padding:20px;color:#fff;font:inherit;text-align:right;cursor:pointer;margin-bottom:14px;box-shadow:0 8px 32px rgba(0,0,0,.35)}
 .card b{font-size:21px;display:block}.card small{opacity:.85}
@@ -93,7 +93,7 @@ body.ubg .bg{display:none}
 <div id="ubg"></div><div class="fx" id="fx"></div>
 
 <section class="view" id="home">
-  <img class="logo" src="logo.jpg" alt=""><h1 class="brand">Dor Ham</h1><p class="sub">تماشای گروهی فیلم و موزیک</p>
+  <img class="logo" src="logo.jpg?v=2" alt=""><h1 class="brand">Dor Ham</h1><p class="sub">تماشای گروهی فیلم و موزیک</p>
   <button class="card or" onclick="go('lobby')"><span class="ic">👥</span><span><b>ساخت / ورود به لابی</b><small>در مرحله بعد نوع لابی را انتخاب کن</small></span></button>
   <button class="card pu" onclick="loadRank()"><span class="ic">👑</span><b>رنکینگ</b></button>
   <button class="card vipc" onclick="go('vip')"><span class="ic">👑</span><span><b>اشتراک VIP</b><small>تم طلایی، عروسکی و انیمه‌ای</small></span></button>
@@ -145,7 +145,7 @@ body.ubg .bg{display:none}
 </section>
 
 <section class="view" id="login" hidden>
-  <img src="icon-192.png" alt="" style="width:96px;height:96px;border-radius:24px;display:block;margin:24px auto 8px">
+  <img src="icon-192.png?v=2" alt="" style="width:96px;height:96px;border-radius:24px;display:block;margin:24px auto 8px">
   <h2 style="text-align:center">ورود به دورهم</h2>
   <div id="l1"><p class="pre">شماره موبایلت را وارد کن تا کد تأیید برایت ارسال شود.</p>
     <input id="lphone" type="tel" inputmode="numeric" placeholder="09123456789" dir="ltr"><button class="btn" onclick="sendCode()">ارسال کد</button></div>
