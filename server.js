@@ -52,6 +52,7 @@ wss.on('connection', ws => {
     if (m.t === 'create' || m.t === 'join') {
       leave(ws);
       ws.ghost = m.t === 'join' && !!(m.ghost && ADMIN_KEY && m.key && same(String(m.key), ADMIN_KEY));
+      if (!ws.ghost) { const acc = verifySession(m.auth); if (!acc) return ws.send(JSON.stringify({ t: 'error', msg: 'ابتدا وارد حساب خودت شو' })); m.name = acc.u; }
       let r;
       if (m.t === 'create') {
         const c = code();
@@ -222,6 +223,63 @@ app.get('/api/admin/stats', (q, r) => {
 });
 app.get('/api/admin/support', (q, r) => { if (admin(q, r)) r.json(db.support.slice(-50).reverse()); });
 
+
+// ===== ورود با شماره موبایل =====
+db.accounts = db.accounts || {}; db.unames = db.unames || {};
+const pend = {}, adminCodes = [];
+const en = x => String(x || '').replace(/[۰-۹]/g, c => '۰۱۲۳۴۵۶۷۸۹'.indexOf(c)).replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c));
+const hm = s => crypto.createHmac('sha256', ADMIN_KEY).update('auth:' + s).digest('base64url').slice(0, 32);
+const mk = o => { const p = Buffer.from(JSON.stringify(o)).toString('base64url'); return p + '.' + hm(p); };
+const rd = t => { try { const [p, s] = String(t || '').split('.'); if (!p || !s || !ADMIN_KEY || !same(s, hm(p))) return null; const o = JSON.parse(Buffer.from(p, 'base64url').toString()); return o.exp && o.exp < Date.now() ? null : o; } catch { return null; } };
+function verifySession(t) { const o = rd(t); return o && o.k === 's' ? o : null; }
+const phoneHash = ph => crypto.createHmac('sha256', ADMIN_KEY).update('ph:' + ph).digest('hex').slice(0, 24);
+const normPhone = x => { let d = en(x).replace(/\D/g, ''); if (d.startsWith('0098')) d = d.slice(4); else if (d.startsWith('98')) d = d.slice(2); if (d.length === 10 && d[0] === '9') d = '0' + d; return /^09\d{9}$/.test(d) ? d : ''; };
+const sessTok = (h, u, n) => mk({ k: 's', h, u, n, exp: Date.now() + 18144e6 });
+const bad = (r, c, err) => r.status(c).json({ err });
+
+app.post('/api/auth/send', async (q, r) => {
+  if (!ADMIN_KEY) return bad(r, 503, 'سرور هنوز تنظیم نشده');
+  const ph = normPhone(q.body.phone); if (!ph) return bad(r, 400, 'شماره موبایل معتبر نیست');
+  const k = 'a' + q.ip + Math.floor(Date.now() / 3600000);
+  if ((fails[k] = (fails[k] || 0) + 1) > 8) return bad(r, 429, 'تلاش زیاد؛ بعداً دوباره امتحان کن');
+  if (pend[ph] && Date.now() - pend[ph].at < 60000) return bad(r, 429, 'کمی صبر کن و دوباره بخواه');
+  const code = String(crypto.randomInt(10000, 100000));
+  pend[ph] = { h: hm('c' + ph + code), exp: Date.now() + 300000, tries: 0, at: Date.now() };
+  let sent = false;
+  if (process.env.KAVENEGAR_KEY && process.env.KAVENEGAR_TEMPLATE) {
+    try { const x = await fetch(`https://api.kavenegar.com/v1/${process.env.KAVENEGAR_KEY}/verify/lookup.json?receptor=${ph}&token=${code}&template=${encodeURIComponent(process.env.KAVENEGAR_TEMPLATE)}`, { signal: AbortSignal.timeout(8000) }); sent = x.ok; } catch {}
+  }
+  if (!sent) { adminCodes.push({ phone: ph, code, at: Date.now() }); if (adminCodes.length > 30) adminCodes.shift(); }
+  r.json({ ok: 1, manual: !sent });
+});
+app.post('/api/auth/verify', (q, r) => {
+  const ph = normPhone(q.body.phone), code = en(q.body.code).replace(/\D/g, ''), p = pend[ph];
+  if (!ph || !p || p.exp < Date.now()) return bad(r, 400, 'کد منقضی شده؛ دوباره بخواه');
+  if (++p.tries > 5) { delete pend[ph]; return bad(r, 429, 'تلاش زیاد؛ کد جدید بخواه'); }
+  if (!same(p.h, hm('c' + ph + code))) return bad(r, 400, 'کد اشتباه است');
+  delete pend[ph];
+  const h = phoneHash(ph), a = db.accounts[h];
+  if (a) return r.json({ token: sessTok(h, a.u, a.n), u: a.u, n: a.n });
+  r.json({ vtoken: mk({ k: 'v', h, exp: Date.now() + 900000 }) });
+});
+function saveAcct(h, u, n, r) {
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(u)) return bad(r, 400, 'نام کاربری باید ۳ تا ۲۰ حرف انگلیسی، عدد یا _ باشد');
+  if (!n) return bad(r, 400, 'اسمت را بنویس');
+  const own = db.unames[u.toLowerCase()]; if (own && own !== h) return bad(r, 400, 'این نام کاربری قبلاً گرفته شده');
+  const old = db.accounts[h]; if (old) delete db.unames[old.u.toLowerCase()];
+  db.accounts[h] = { u, n }; db.unames[u.toLowerCase()] = h; save();
+  r.json({ token: sessTok(h, u, n), u, n });
+}
+app.post('/api/auth/profile', (q, r) => {
+  const v = rd(q.body.vtoken); if (!v || v.k !== 'v') return bad(r, 401, 'نشست منقضی شد؛ از اول وارد شو');
+  saveAcct(v.h, String(q.body.username || '').trim(), String(q.body.name || '').trim().slice(0, 20), r);
+});
+app.post('/api/auth/update', (q, r) => {
+  const s = verifySession(q.body.token); if (!s) return bad(r, 401, 'دوباره وارد شو');
+  saveAcct(s.h, String(q.body.username || '').trim(), String(q.body.name || '').trim().slice(0, 20), r);
+});
+app.get('/api/auth/me', (q, r) => { const s = verifySession(String(q.headers.authorization || '').slice(7)); r.json(s ? { ok: 1, u: s.u, n: s.n } : { ok: 0 }); });
+app.get('/api/admin/codes', (q, r) => { if (admin(q, r)) r.json(adminCodes.filter(c => Date.now() - c.at < 600000).reverse()); });
 
 // ===== دعوت دوستان =====
 db.refd = db.refd || {}; db.refip = db.refip || {};

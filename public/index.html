@@ -6,10 +6,11 @@
 <meta name="theme-color" content="#07070a">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Dor Ham</title>
 <meta property="og:title" content="Dor Ham - تماشای گروهی فیلم و موزیک">
 <meta property="og:description" content="با دوستانت همزمان فیلم ببین و چت کن 🎬">
-<meta property="og:image" content="https://dorham-watch.onrender.com/logo.jpg">
+<meta property="og:image" content="https://dorham-watch.onrender.com/icon-512.png">
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#07070a;--tx:#f7eef0;--mu:#ad9aa1;--red:#e11d2e;--red2:#ff4558;--glass:rgba(255,255,255,.07);--gb:rgba(255,255,255,.15);--dk:#a30015;--b1:#c1121f;--b2:#7a0010;--glow:rgba(225,29,46,.5);--c1:rgba(255,69,88,.75);--c2:rgba(150,0,20,.7)}
@@ -83,10 +84,13 @@ body[data-theme=anime] .brand{background-image:linear-gradient(90deg,#fff,#8a7df
 #ubg::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.45)}
 body.ubg .bg{display:none}
 #callst{color:var(--mu);text-align:center;margin:0 0 10px}
+#wrench{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:12px;z-index:50;width:44px;height:44px;border-radius:50%;border:1px solid var(--gb);background:var(--glass);color:var(--tx);font-size:20px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);cursor:pointer}
+.back{margin-inline-start:52px}
 </style>
 </head>
 <body>
-<div class="bg"><i></i><i></i></div><div id="ubg"></div><div class="fx" id="fx"></div>
+<div class="bg"><i></i><i></i></div><button id="wrench" onclick="go('account')" aria-label="تنظیمات حساب" hidden>🔧</button>
+<div id="ubg"></div><div class="fx" id="fx"></div>
 
 <section class="view" id="home">
   <img class="logo" src="logo.jpg" alt=""><h1 class="brand">Dor Ham</h1><p class="sub">تماشای گروهی فیلم و موزیک</p>
@@ -140,11 +144,26 @@ body.ubg .bg{display:none}
   <div id="rlist"></div>
 </section>
 
+<section class="view" id="login" hidden>
+  <img src="icon-192.png" alt="" style="width:96px;height:96px;border-radius:24px;display:block;margin:24px auto 8px">
+  <h2 style="text-align:center">ورود به دورهم</h2>
+  <div id="l1"><p class="pre">شماره موبایلت را وارد کن تا کد تأیید برایت ارسال شود.</p>
+    <input id="lphone" type="tel" inputmode="numeric" placeholder="09123456789" dir="ltr"><button class="btn" onclick="sendCode()">ارسال کد</button></div>
+  <div id="l2" hidden><p class="pre" id="lhint"></p>
+    <input id="lcode" type="tel" inputmode="numeric" placeholder="کد ۵ رقمی" dir="ltr"><button class="btn" onclick="checkCode()">تأیید کد</button>
+    <button class="btn alt" onclick="step(1)">تغییر شماره</button></div>
+  <div id="l3" hidden><p class="pre">آخرین قدم؛ نام کاربری (انگلیسی) و اسمت را بنویس.</p>
+    <input id="lun" placeholder="نام کاربری، مثلاً ali_90" dir="ltr"><input id="lnm" placeholder="اسم تو">
+    <button class="btn" onclick="saveProfile()">ورود به برنامه</button></div>
+</section>
+
 <section class="view" id="account" hidden>
   <button class="back" onclick="go('home')">← بازگشت</button>
   <h2>حساب کاربری</h2>
-  <input id="uname" placeholder="نام نمایشی">
-  <button class="btn" onclick="saveName()">ذخیره</button>
+  <input id="aname" placeholder="نام و نام‌خانوادگی">
+  <input id="aun" placeholder="نام کاربری (انگلیسی)" dir="ltr">
+  <button class="btn" onclick="saveAcct()">ذخیره</button>
+  <button class="btn alt" onclick="logout()">خروج از حساب</button>
   <details style="margin-top:18px"><summary style="color:var(--mu)">مدیر</summary>
     <input id="akey" type="password" placeholder="رمز مدیر" dir="ltr"><button class="btn alt" onclick="admLogin()">ورود مدیر</button></details>
 </section>
@@ -170,6 +189,7 @@ body.ubg .bg{display:none}
   <h2>👁 پنل مدیر</h2>
   <p class="pre" id="astats"></p>
   <div id="arooms"></div>
+  <p class="pre" id="acodes"></p>
   <button class="btn alt" onclick="loadAdm()">بروزرسانی</button>
   <button class="btn alt" onclick="admOut()">خروج از حالت مدیر</button>
 </section>
@@ -205,12 +225,12 @@ body.ubg .bg{display:none}
 <div id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
-let ws, me = localStorage.name || '', inRoom = false, applying = false, tok = '';
+let sess = localStorage.sess || '', ws, me = sess ? (localStorage.uname || '') : '', inRoom = false, applying = false, tok = '';
 const toast = t => { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); };
 let go = id => {
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== id);
   if (id === 'lobby') loadLobbies();
-  if (id === 'account') $('#uname').value = me;
+  if (id === 'account') { $('#aname').value = localStorage.fname || ''; $('#aun').value = me; }
 };
 const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 const needName = () => { if (me) return true; toast('اول یک نام انتخاب کن'); go('account'); return false; };
@@ -222,16 +242,16 @@ function connect(cb) {
   ws.onmessage = e => handle(JSON.parse(e.data));
   ws.onclose = () => { stopCall(); if (inRoom) { toast('اتصال قطع شد؛ در حال اتصال مجدد...'); retry(); } };
 }
-const createLobby = () => needName() && connect(() => send({ t: 'create', name: me, type: $('#ltype').value }));
-const joinLobby = c => needName() && connect(() => send({ t: 'join', name: me, code: String(c).trim() }));
+const createLobby = () => needName() && connect(() => send({ t: 'create', auth: sess, name: me, type: $('#ltype').value }));
+const joinLobby = c => needName() && connect(() => send({ t: 'join', auth: sess, name: me, code: String(c).trim() }));
 // ===== بازگشت خودکار به لابی =====
 let retryT = 0;
 function retry() {
   clearTimeout(retryT);
   const c = localStorage.room; if (!c || !me) return;
-  retryT = setTimeout(() => { if (ws && ws.readyState === 1) return; ws = null; connect(() => send({ t: 'join', name: me, code: c })); if (ws) ws.onerror = () => {}; }, 2000);
+  retryT = setTimeout(() => { if (ws && ws.readyState === 1) return; ws = null; connect(() => send({ t: 'join', auth: sess, name: me, code: c })); if (ws) ws.onerror = () => {}; }, 2000);
 }
-const resume = () => { if (localStorage.room && me && !(ws && ws.readyState === 1)) { ws = null; connect(() => send({ t: 'join', name: me, code: localStorage.room })); } };
+const resume = () => { if (localStorage.room && me && !(ws && ws.readyState === 1)) { ws = null; connect(() => send({ t: 'join', auth: sess, name: me, code: localStorage.room })); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resume(); });
 addEventListener('online', resume);
 function leaveRoom() { endCall(); send({ t: 'leave' }); localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
@@ -245,8 +265,8 @@ async function upFile(f) {
   if (!f) return;
   const ext = (f.name.split('.').pop() || 'mp4').toLowerCase(), CH = 8 * 1024 * 1024, n = Math.ceil(f.size / CH), prog = new Array(n).fill(0), t0 = Date.now();
   const id = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('');
-  let next = 0, failed = false;
-  const upd = () => { const b = prog.reduce((a, c) => a + c, 0), sp = b / ((Date.now() - t0) / 1000 || 1); $('#upst').textContent = `در حال آپلود... ${Math.round(b / f.size * 100)}٪ — ${(sp / 1048576).toFixed(1)} مگابایت بر ثانیه`; };
+  let next = 0, failed = false, active = 0;
+  const upd = () => { const b = prog.reduce((a, c) => a + c, 0), sp = b / ((Date.now() - t0) / 1000 || 1); $('#upst').textContent = `در حال آپلود... ${Math.round(b / f.size * 100)}٪ — ${(sp / 1048576).toFixed(1)} مگابایت بر ثانیه (${active} اتصال)`; };
   const sendChunk = i => new Promise((ok, bad) => {
     const x = new XMLHttpRequest(); x.open('POST', `/upload-chunk?tok=${tok}&id=${id}&i=${i}&n=${n}&ch=${CH}&size=${f.size}`);
     x.setRequestHeader('X-Ext', ext);
@@ -261,8 +281,22 @@ async function upFile(f) {
     }
   };
   $('#upst').textContent = 'شروع آپلود...';
-  try { await Promise.all(Array.from({ length: Math.min(4, n) }, worker)); $('#upst').textContent = 'آپلود شد ✅'; }
-  catch { $('#upst').textContent = 'خطا در آپلود؛ اینترنت را چک کن و دوباره امتحان کن'; }
+  let tuner;
+  try {
+    await new Promise((ok, bad) => {
+      let run = 0;
+      const spawn = () => { run++; active++; worker().then(() => { active--; if (--run === 0) ok(); }, bad); };
+      for (let k = 0; k < Math.min(4, n); k++) spawn();
+      let last = 0, prev = 0; // هر ۳ ثانیه اگر سرعت بیشتر شد، اتصال بیشتر اضافه می‌شود (تا ۱۲)
+      tuner = setInterval(() => {
+        const b = prog.reduce((a, c) => a + c, 0), rate = (b - last) / 3; last = b;
+        if (prev && rate > prev * 1.15 && active < 12 && next < n) { spawn(); spawn(); }
+        prev = rate;
+      }, 3000);
+    });
+    $('#upst').textContent = 'آپلود شد ✅';
+  } catch { $('#upst').textContent = 'خطا در آپلود؛ اینترنت را چک کن و دوباره امتحان کن'; }
+  clearInterval(tuner);
 }
 // پخش از فایل خودِ هر نفر (بدون آپلود)
 let lmeta = null;
@@ -505,6 +539,7 @@ async function loadAdm() {
   try {
     const s = await admFetch();
     $('#astats').textContent = `کاربران ثبت‌شده: ${s.users}\nلابی‌های ساخته‌شده: ${s.lobbiesTotal}\nلابی‌های فعال: ${s.rooms.length}\nآنلاین الان: ${s.online}\nکدهای VIP مصرف‌شده: ${s.vipCodesUsed}\n(آمار با ری‌استارت سرور صفر می‌شود)`;
+    try { const c = await (await fetch('/api/admin/codes', { headers: { 'x-key': AK() } })).json(); $('#acodes').textContent = c.length ? 'کدهای ورود در انتظار ارسال:\n' + c.map(x => x.phone + '  ←  ' + x.code).join('\n') : ''; } catch {}
     const box = $('#arooms'); box.textContent = '';
     s.rooms.forEach(x => {
       const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('button'); d.className = 'row';
@@ -515,6 +550,19 @@ async function loadAdm() {
   } catch { toast('خطا؛ دوباره وارد حالت مدیر شو'); }
 }
 showAdm();
+
+// ===== ورود با شماره موبایل =====
+const step = n => [1, 2, 3].forEach(i => $('#l' + i).hidden = i !== n);
+async function api(path, body) { const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.err || 'خطا؛ دوباره امتحان کن'); return j; }
+let vtok = '', lphone = '';
+async function sendCode() { try { const j = await api('/api/auth/send', { phone: $('#lphone').value }); lphone = $('#lphone').value; step(2); $('#lhint').textContent = j.manual ? 'کد برای شماره‌ات ارسال می‌شود (ممکن است چند دقیقه طول بکشد).' : 'کد ۵ رقمی برایت پیامک شد.'; } catch (e) { toast(e.message); } }
+async function checkCode() { try { const j = await api('/api/auth/verify', { phone: lphone, code: $('#lcode').value }); if (j.token) return finishLogin(j); vtok = j.vtoken; step(3); } catch (e) { toast(e.message); } }
+async function saveProfile() { try { finishLogin(await api('/api/auth/profile', { vtoken: vtok, username: $('#lun').value.trim(), name: $('#lnm').value.trim() })); } catch (e) { toast(e.message); } }
+function finishLogin(j) { sess = j.token; localStorage.sess = sess; localStorage.uname = j.u; localStorage.fname = j.n; localStorage.name = me = j.u; $('#lcode').value = ''; claimRef(); go('home'); resume(); }
+async function saveAcct() { try { const j = await api('/api/auth/update', { token: sess, name: $('#aname').value.trim(), username: $('#aun').value.trim() }); sess = j.token; localStorage.sess = sess; localStorage.uname = j.u; localStorage.fname = j.n; localStorage.name = me = j.u; toast('ذخیره شد'); go('home'); } catch (e) { toast(e.message); } }
+function logout() { if (ws) { send({ t: 'leave' }); ws.onclose = null; try { ws.close(); } catch {} ws = null; inRoom = false; } ['sess', 'room', 'uname', 'fname', 'name'].forEach(k => localStorage.removeItem(k)); sess = ''; me = ''; go('login'); }
+const _go3 = go; go = id => { if (!sess && id !== 'login') id = 'login'; _go3(id); if (id === 'login') step(1); $('#wrench').hidden = !sess || id === 'login'; };
+if (!sess) go('login'); else { go('home'); fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + sess } }).then(r => r.json()).then(j => { if (!j.ok) logout(); }).catch(() => {}); }
 applyTheme(); checkVip(); claimRef(); resume();
 </script>
 </body>
