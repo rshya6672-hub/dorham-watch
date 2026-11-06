@@ -52,7 +52,7 @@ wss.on('connection', ws => {
     if (m.t === 'create' || m.t === 'join') {
       leave(ws);
       ws.ghost = m.t === 'join' && !!(m.ghost && ADMIN_KEY && m.key && same(String(m.key), ADMIN_KEY));
-      if (!ws.ghost) { const acc = verifySession(m.auth); if (!acc) return ws.send(JSON.stringify({ t: 'error', msg: 'ابتدا وارد حساب خودت شو' })); m.name = acc.u; }
+      if (!ws.ghost) { m.name = String(m.name || '').trim().slice(0, 20); if (!m.name) return ws.send(JSON.stringify({ t: 'error', msg: 'اول یک نام انتخاب کن' })); }
       let r;
       if (m.t === 'create') {
         const c = code();

@@ -89,7 +89,7 @@ body.ubg .bg{display:none}
 </style>
 </head>
 <body>
-<div class="bg"><i></i><i></i></div><button id="wrench" onclick="go('account')" aria-label="تنظیمات حساب" hidden>🔧</button>
+<div class="bg"><i></i><i></i></div><button id="wrench" onclick="go('account')" aria-label="تنظیمات حساب">🔧</button>
 <div id="ubg"></div><div class="fx" id="fx"></div>
 
 <section class="view" id="home">
@@ -144,30 +144,11 @@ body.ubg .bg{display:none}
   <div id="rlist"></div>
 </section>
 
-<section class="view" id="login" hidden>
-  <img src="icon-192.png?v=2" alt="" style="width:96px;height:96px;border-radius:24px;display:block;margin:24px auto 8px">
-  <h2 style="text-align:center">ورود به دورهم</h2>
-  <div id="l1">
-    <div class="th"><button id="tphone" class="on" onclick="setMode('p')">📱 شماره موبایل</button><button id="temail" onclick="setMode('e')">✉️ ایمیل</button></div>
-    <p class="pre" id="lp1">شماره موبایلت را وارد کن تا کد تأیید برایت ارسال شود.</p>
-    <input id="lphone" type="tel" inputmode="numeric" placeholder="09123456789" dir="ltr">
-    <input id="lemail" type="email" placeholder="name@example.com" dir="ltr" autocapitalize="off" hidden>
-    <button class="btn" onclick="sendCode()">ارسال کد</button></div>
-  <div id="l2" hidden><p class="pre" id="lhint"></p>
-    <input id="lcode" type="tel" inputmode="numeric" placeholder="کد ۵ رقمی" dir="ltr"><button class="btn" onclick="checkCode()">تأیید کد</button>
-    <button class="btn alt" onclick="step(1)">تغییر شماره / ایمیل</button></div>
-  <div id="l3" hidden><p class="pre">آخرین قدم؛ نام کاربری (انگلیسی) و اسمت را بنویس.</p>
-    <input id="lun" placeholder="نام کاربری، مثلاً ali_90" dir="ltr"><input id="lnm" placeholder="اسم تو">
-    <button class="btn" onclick="saveProfile()">ورود به برنامه</button></div>
-</section>
-
 <section class="view" id="account" hidden>
   <button class="back" onclick="go('home')">← بازگشت</button>
   <h2>حساب کاربری</h2>
-  <input id="aname" placeholder="نام و نام‌خانوادگی">
-  <input id="aun" placeholder="نام کاربری (انگلیسی)" dir="ltr">
-  <button class="btn" onclick="saveAcct()">ذخیره</button>
-  <button class="btn alt" onclick="logout()">خروج از حساب</button>
+  <input id="uname" placeholder="نام نمایشی">
+  <button class="btn" onclick="saveName()">ذخیره</button>
   <details style="margin-top:18px"><summary style="color:var(--mu)">مدیر</summary>
     <input id="akey" type="password" placeholder="رمز مدیر" dir="ltr"><button class="btn alt" onclick="admLogin()">ورود مدیر</button></details>
 </section>
@@ -229,12 +210,12 @@ body.ubg .bg{display:none}
 <div id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
-let sess = localStorage.sess || '', ws, me = sess ? (localStorage.uname || '') : '', inRoom = false, applying = false, tok = '';
+let sess = '', ws, me = localStorage.name || localStorage.uname || '', inRoom = false, applying = false, tok = '';
 const toast = t => { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); };
 let go = id => {
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== id);
   if (id === 'lobby') loadLobbies();
-  if (id === 'account') { $('#aname').value = localStorage.fname || ''; $('#aun').value = me; }
+  if (id === 'account') $('#uname').value = me;
 };
 const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 const needName = () => { if (me) return true; toast('اول یک نام انتخاب کن'); go('account'); return false; };
@@ -555,29 +536,7 @@ async function loadAdm() {
 }
 showAdm();
 
-// ===== ورود با شماره موبایل =====
-const step = n => [1, 2, 3].forEach(i => $('#l' + i).hidden = i !== n);
-async function api(path, body) { const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.err || 'خطا؛ دوباره امتحان کن'); return j; }
-let vtok = '', lid = {}, lmode = 'p';
-function setMode(m) {
-  lmode = m; $('#lphone').hidden = m !== 'p'; $('#lemail').hidden = m !== 'e';
-  $('#tphone').className = m === 'p' ? 'on' : ''; $('#temail').className = m === 'e' ? 'on' : '';
-  $('#lp1').textContent = m === 'p' ? 'شماره موبایلت را وارد کن تا کد تأیید برایت ارسال شود.' : 'ایمیلت را وارد کن تا کد تأیید به آن ارسال شود.';
-}
-async function sendCode() {
-  try {
-    const body = lmode === 'p' ? { phone: $('#lphone').value } : { email: $('#lemail').value };
-    const j = await api('/api/auth/send', body); lid = body; step(2);
-    $('#lhint').textContent = j.email ? 'کد ۵ رقمی به ایمیلت ارسال شد (پوشه‌ی اسپم را هم نگاه کن).' : j.manual ? 'کد برای شماره‌ات ارسال می‌شود (ممکن است چند دقیقه طول بکشد).' : 'کد ۵ رقمی برایت پیامک شد.';
-  } catch (e) { toast(e.message); }
-}
-async function checkCode() { try { const j = await api('/api/auth/verify', { ...lid, code: $('#lcode').value }); if (j.token) return finishLogin(j); vtok = j.vtoken; step(3); } catch (e) { toast(e.message); } }
-async function saveProfile() { try { finishLogin(await api('/api/auth/profile', { vtoken: vtok, username: $('#lun').value.trim(), name: $('#lnm').value.trim() })); } catch (e) { toast(e.message); } }
-function finishLogin(j) { sess = j.token; localStorage.sess = sess; localStorage.uname = j.u; localStorage.fname = j.n; localStorage.name = me = j.u; $('#lcode').value = ''; claimRef(); go('home'); resume(); }
-async function saveAcct() { try { const j = await api('/api/auth/update', { token: sess, name: $('#aname').value.trim(), username: $('#aun').value.trim() }); sess = j.token; localStorage.sess = sess; localStorage.uname = j.u; localStorage.fname = j.n; localStorage.name = me = j.u; toast('ذخیره شد'); go('home'); } catch (e) { toast(e.message); } }
-function logout() { if (ws) { send({ t: 'leave' }); ws.onclose = null; try { ws.close(); } catch {} ws = null; inRoom = false; } ['sess', 'room', 'uname', 'fname', 'name'].forEach(k => localStorage.removeItem(k)); sess = ''; me = ''; go('login'); }
-const _go3 = go; go = id => { if (!sess && id !== 'login') id = 'login'; _go3(id); if (id === 'login') step(1); $('#wrench').hidden = !sess || id === 'login'; };
-if (!sess) go('login'); else { go('home'); fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + sess } }).then(r => r.json()).then(j => { if (!j.ok) logout(); }).catch(() => {}); }
+['sess','fname'].forEach(k => localStorage.removeItem(k));
 applyTheme(); checkVip(); claimRef(); resume();
 </script>
 </body>
