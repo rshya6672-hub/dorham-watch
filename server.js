@@ -34,19 +34,15 @@ const bcast = (rm, msg, except) => rm.members.forEach((n, w) => { if (w !== exce
 const curTime = s => s.time + (s.playing ? (Date.now() - s.at) / 1000 : 0);
 
 const GRACE = 10 * 60 * 1000; // لابی خالی (بدون خروج دستی) تا ۱۰ دقیقه می‌ماند؛ با «خروج» آخرین نفر فوراً حذف می‌شود
-const validAv = x => typeof x === 'string' && x.startsWith('data:image/jpeg;base64,') && x.length < 24000 ? x : '';
-const avMap = rm => { const o = {}; rm.members.forEach((n, w) => { if (w.av && !w.ghost) o[n] = w.av; }); return o; };
-const callMuted = rm => rm.callers ? [...rm.callers].filter(w => w.muted && !w.ghost).map(w => rm.members.get(w)).filter(Boolean) : [];
 const callList = rm => rm.callers ? [...rm.callers].filter(w => !w.ghost).map(w => rm.members.get(w)).filter(Boolean) : [];
 const chatPush = (rm, msg) => { (rm.chat = rm.chat || []).push(msg); if (rm.chat.length > 40) rm.chat.shift(); bcast(rm, msg); };
 
 function leave(ws, final) {
   const rm = rooms[ws.room]; if (!rm) return;
-  ws.muted = false;
   if (rm.callers && rm.callers.delete(ws)) { bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws); bcast(rm, { t: 'calllist', list: callList(rm) }, ws); }
   rm.members.delete(ws); ws.room = null;
   if (!names(rm).length) { if (final && !ws.ghost) delete rooms[rm.code]; else rm.emptyAt = rm.emptyAt || Date.now(); }
-  else bcast(rm, { t: 'members', members: names(rm), avs: avMap(rm) });
+  else bcast(rm, { t: 'members', members: names(rm) });
 }
 
 wss.on('connection', ws => {
@@ -58,7 +54,6 @@ wss.on('connection', ws => {
       leave(ws);
       ws.ghost = m.t === 'join' && !!(m.ghost && ADMIN_KEY && m.key && same(String(m.key), ADMIN_KEY));
       if (!ws.ghost) { m.name = String(m.name || '').trim().slice(0, 20); if (!m.name) return ws.send(JSON.stringify({ t: 'error', msg: 'اول یک نام انتخاب کن' })); }
-      ws.av = validAv(m.av); ws.muted = false;
       let r;
       if (m.t === 'create') {
         const c = code();
@@ -72,16 +67,14 @@ wss.on('connection', ws => {
       if (!ws.ghost) r.emptyAt = 0;
       ws.room = r.code; r.members.set(ws, String(m.name).slice(0, 20));
       const tok = crypto.randomBytes(8).toString('hex'); upToks[tok] = { code: r.code, name: String(m.name).slice(0, 20) };
-      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null, calls: callList(r), cmuted: callMuted(r), avs: avMap(r) }));
+      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null, calls: callList(r) }));
       if (!ws.ghost) {
-        bcast(r, { t: 'members', members: names(r), avs: avMap(r) }, ws);
+        bcast(r, { t: 'members', members: names(r) }, ws);
         if (!db.users[nm]) { db.users[nm] = Date.now(); save(); }
       }
       if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; db.stats.lobbies++; save(); }
     } else if (rm) {
       if (m.t === 'leave') leave(ws, true);
-      else if (m.t === 'setav') { ws.av = validAv(m.av); bcast(rm, { t: 'avs', avs: avMap(rm) }); }
-      else if (m.t === 'mute') { if (rm.callers && rm.callers.has(ws)) { ws.muted = !!m.muted; bcast(rm, { t: 'callmute', muted: callMuted(rm) }); } }
       else if (m.t === 'localmedia') {
         rm.local = { name: String(m.name || '').slice(0, 120), size: Number(m.size) || 0 }; rm.media = ''; rm.state = { playing: false, time: 0, at: Date.now() };
         bcast(rm, { t: 'localmedia', ...rm.local, by: rm.members.get(ws) }, ws);
