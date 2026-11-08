@@ -34,11 +34,12 @@ const bcast = (rm, msg, except) => rm.members.forEach((n, w) => { if (w !== exce
 const curTime = s => s.time + (s.playing ? (Date.now() - s.at) / 1000 : 0);
 
 const GRACE = 10 * 60 * 1000; // لابی خالی (بدون خروج دستی) تا ۱۰ دقیقه می‌ماند؛ با «خروج» آخرین نفر فوراً حذف می‌شود
+const callList = rm => rm.callers ? [...rm.callers].filter(w => !w.ghost).map(w => rm.members.get(w)).filter(Boolean) : [];
 const chatPush = (rm, msg) => { (rm.chat = rm.chat || []).push(msg); if (rm.chat.length > 40) rm.chat.shift(); bcast(rm, msg); };
 
 function leave(ws, final) {
   const rm = rooms[ws.room]; if (!rm) return;
-  if (rm.callers && rm.callers.delete(ws)) bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws);
+  if (rm.callers && rm.callers.delete(ws)) { bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws); bcast(rm, { t: 'calllist', list: callList(rm) }, ws); }
   rm.members.delete(ws); ws.room = null;
   if (!names(rm).length) { if (final && !ws.ghost) delete rooms[rm.code]; else rm.emptyAt = rm.emptyAt || Date.now(); }
   else bcast(rm, { t: 'members', members: names(rm) });
@@ -66,7 +67,7 @@ wss.on('connection', ws => {
       if (!ws.ghost) r.emptyAt = 0;
       ws.room = r.code; r.members.set(ws, String(m.name).slice(0, 20));
       const tok = crypto.randomBytes(8).toString('hex'); upToks[tok] = { code: r.code, name: String(m.name).slice(0, 20) };
-      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null }));
+      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null, calls: callList(r) }));
       if (!ws.ghost) {
         bcast(r, { t: 'members', members: names(r) }, ws);
         if (!db.users[nm]) { db.users[nm] = Date.now(); save(); }
@@ -80,12 +81,14 @@ wss.on('connection', ws => {
       }
       else if (m.t === 'media') { rm.local = null; rm.media = String(m.url); rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
       else if (m.t === 'callon') {
+        if (ws.ghost) return;
         rm.callers = rm.callers || new Set();
         const others = [...rm.callers].filter(w => w !== ws).map(w => rm.members.get(w));
         rm.callers.add(ws);
         ws.send(JSON.stringify({ t: 'callers', list: others }));
         bcast(rm, { t: 'callon', name: rm.members.get(ws) }, ws);
-      } else if (m.t === 'calloff') { if (rm.callers && rm.callers.delete(ws)) bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws); }
+        bcast(rm, { t: 'calllist', list: callList(rm) });
+      } else if (m.t === 'calloff') { if (rm.callers && rm.callers.delete(ws)) { bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws); bcast(rm, { t: 'calllist', list: callList(rm) }); } }
       else if (m.t === 'rtc') { rm.members.forEach((n, w) => { if (n === m.to && w.readyState === 1) w.send(JSON.stringify({ t: 'rtc', from: rm.members.get(ws), data: m.data })); }); }
       else if (['play', 'pause', 'seek'].includes(m.t)) {
         const time = Number(m.time) || 0;
