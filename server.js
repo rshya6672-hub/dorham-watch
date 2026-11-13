@@ -1,4 +1,4 @@
-const express = require('express'), http = require('http'), fs = require('fs'), crypto = require('crypto');
+const express = require('express'), http = require('http'), fs = require('fs'), crypto = require('crypto'), https = require('https');
 const { WebSocketServer } = require('ws');
 const app = express();
 app.set('trust proxy', 1);
@@ -13,6 +13,7 @@ try { db = JSON.parse(fs.readFileSync('db.json')); } catch {}
 const save = () => fs.writeFileSync('db.json', JSON.stringify(db));
 
 const upToks = {}; // توکن آپلود -> کد لابی
+const MEDIA_TTL = 24 * 3600e3; // فایل‌های آپلودشده ۲۴ ساعت می‌مانند
 const rooms = {}; // code -> {code,type,title,media,state,members:Map(ws->name)}
 const code = () => { let c; do c = String(Math.floor(1000 + Math.random() * 9000)); while (rooms[c]); return c; };
 
@@ -34,15 +35,24 @@ const bcast = (rm, msg, except) => rm.members.forEach((n, w) => { if (w !== exce
 const curTime = s => s.time + (s.playing ? (Date.now() - s.at) / 1000 : 0);
 
 const GRACE = 10 * 60 * 1000; // لابی خالی (بدون خروج دستی) تا ۱۰ دقیقه می‌ماند؛ با «خروج» آخرین نفر فوراً حذف می‌شود
+const validAv = x => typeof x === 'string' && x.startsWith('data:image/jpeg;base64,') && x.length < 24000 ? x : '';
+const avMap = rm => { const o = {}; rm.members.forEach((n, w) => { if (w.av && !w.ghost) o[n] = w.av; }); return o; };
+const callMuted = rm => rm.callers ? [...rm.callers].filter(w => w.muted && !w.ghost).map(w => rm.members.get(w)).filter(Boolean) : [];
 const callList = rm => rm.callers ? [...rm.callers].filter(w => !w.ghost).map(w => rm.members.get(w)).filter(Boolean) : [];
-const chatPush = (rm, msg) => { (rm.chat = rm.chat || []).push(msg); if (rm.chat.length > 40) rm.chat.shift(); bcast(rm, msg); };
+const chatPush = (rm, msg) => {
+  (rm.chat = rm.chat || []).push(msg); if (rm.chat.length > 40) rm.chat.shift(); bcast(rm, msg);
+  pushAway(rm, msg.name, { title: msg.name + ' · لابی ' + rm.code, body: msg.voice ? '🎤 پیام صوتی' : String(msg.text || '').slice(0, 120), tag: 'chat-' + rm.code, url: '/?room=' + rm.code });
+};
 
 function leave(ws, final) {
   const rm = rooms[ws.room]; if (!rm) return;
+  ws.muted = false;
   if (rm.callers && rm.callers.delete(ws)) { bcast(rm, { t: 'calloff', name: rm.members.get(ws) }, ws); bcast(rm, { t: 'calllist', list: callList(rm) }, ws); }
+  const nm0 = rm.members.get(ws);
+  if (!final && !ws.ghost && ws.ep && nm0) { rm.away = rm.away || {}; rm.away[nm0] = { ep: ws.ep, at: Date.now(), last: 0 }; }
   rm.members.delete(ws); ws.room = null;
-  if (!names(rm).length) { if (final && !ws.ghost) delete rooms[rm.code]; else rm.emptyAt = rm.emptyAt || Date.now(); }
-  else bcast(rm, { t: 'members', members: names(rm) });
+  if (!names(rm).length) { if (final && !ws.ghost) { archiveRoom(rm); delete rooms[rm.code]; } else rm.emptyAt = rm.emptyAt || Date.now(); }
+  else bcast(rm, { t: 'members', members: names(rm), avs: avMap(rm) });
 }
 
 wss.on('connection', ws => {
@@ -50,31 +60,39 @@ wss.on('connection', ws => {
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     const rm = rooms[ws.room];
+    if (m.t === 'hello') { ws.ep = String(m.ep || '').slice(0, 600); if (m.name) ws.gname = String(m.name).trim().slice(0, 20); return; }
+    if (['gcreate', 'gjoin', 'glist', 'gleave', 'gmsg'].includes(m.t)) return handleG(ws, m);
     if (m.t === 'create' || m.t === 'join') {
       leave(ws);
       ws.ghost = m.t === 'join' && !!(m.ghost && ADMIN_KEY && m.key && same(String(m.key), ADMIN_KEY));
       if (!ws.ghost) { m.name = String(m.name || '').trim().slice(0, 20); if (!m.name) return ws.send(JSON.stringify({ t: 'error', msg: 'اول یک نام انتخاب کن' })); }
+      ws.av = validAv(m.av); ws.muted = false;
       let r;
       if (m.t === 'create') {
         const c = code();
-        r = rooms[c] = { code: c, type: m.type === 'private' ? 'private' : 'public', title: `لابی ${String(m.name).slice(0, 20)}`, media: '', state: { playing: false, time: 0, at: Date.now() }, members: new Map(), chat: [], emptyAt: 0 };
+        r = rooms[c] = { code: c, type: m.type === 'private' ? 'private' : 'public', title: `لابی ${String(m.name).slice(0, 20)}`, media: '', state: { playing: false, time: 0, at: Date.now() }, members: new Map(), chat: [], emptyAt: 0, by: String(m.name).slice(0, 20), at: Date.now(), seen: new Set(), uploads: [] };
       } else {
         r = rooms[m.code];
+        if (!r && ws.ghost && m.arch) r = restoreRoom(String(m.arch));
         if (!r) return ws.send(JSON.stringify({ t: 'error', msg: 'لابی‌ای با این کد پیدا نشد' }));
       }
       const nm = String(m.name).slice(0, 20);
       r.members.forEach((n, w) => { if (!ws.ghost && !w.ghost && n === nm && w !== ws) { r.members.delete(w); w.room = null; try { w.close(); } catch {} } });
       if (!ws.ghost) r.emptyAt = 0;
+      if (r.away) delete r.away[nm];
+      if (!ws.ghost) (r.seen = r.seen || new Set()).add(nm);
       ws.room = r.code; r.members.set(ws, String(m.name).slice(0, 20));
       const tok = crypto.randomBytes(8).toString('hex'); upToks[tok] = { code: r.code, name: String(m.name).slice(0, 20) };
-      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null, calls: callList(r) }));
+      ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null, calls: callList(r), cmuted: callMuted(r), avs: avMap(r) }));
       if (!ws.ghost) {
-        bcast(r, { t: 'members', members: names(r) }, ws);
+        bcast(r, { t: 'members', members: names(r), avs: avMap(r) }, ws);
         if (!db.users[nm]) { db.users[nm] = Date.now(); save(); }
       }
-      if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; db.stats.lobbies++; save(); }
+      if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; db.stats.lobbies++; save(); if (r.type === 'public') notifyNewLobby(r, nm, ws); }
     } else if (rm) {
       if (m.t === 'leave') leave(ws, true);
+      else if (m.t === 'setav') { ws.av = validAv(m.av); bcast(rm, { t: 'avs', avs: avMap(rm) }); }
+      else if (m.t === 'mute') { if (rm.callers && rm.callers.has(ws)) { ws.muted = !!m.muted; bcast(rm, { t: 'callmute', muted: callMuted(rm) }); } }
       else if (m.t === 'localmedia') {
         rm.local = { name: String(m.name || '').slice(0, 120), size: Number(m.size) || 0 }; rm.media = ''; rm.state = { playing: false, time: 0, at: Date.now() };
         bcast(rm, { t: 'localmedia', ...rm.local, by: rm.members.get(ws) }, ws);
@@ -83,6 +101,7 @@ wss.on('connection', ws => {
       else if (m.t === 'callon') {
         if (ws.ghost) return;
         rm.callers = rm.callers || new Set();
+        if (!rm.callers.size) pushAway(rm, rm.members.get(ws), { title: rm.members.get(ws) + ' تماس صوتی شروع کرد 🎙', body: 'لابی ' + rm.code, tag: 'call-' + rm.code, url: '/?room=' + rm.code });
         const others = [...rm.callers].filter(w => w !== ws).map(w => rm.members.get(w));
         rm.callers.add(ws);
         ws.send(JSON.stringify({ t: 'callers', list: others }));
@@ -97,12 +116,13 @@ wss.on('connection', ws => {
       } else if (m.t === 'chat') chatPush(rm, { t: 'chat', name: rm.members.get(ws), text: String(m.text).slice(0, 300) });
     }
   });
-  ws.on('close', () => leave(ws));
+  ws.on('close', () => { leave(ws); gDrop(ws); });
 });
 
 setInterval(() => {
   wss.clients.forEach(w => { if (!w.alive) return w.terminate(); w.alive = false; try { w.ping(); } catch {} });
-  Object.values(rooms).forEach(rm => { if (!names(rm).length && rm.emptyAt && Date.now() - rm.emptyAt > GRACE) delete rooms[rm.code]; });
+  Object.values(rooms).forEach(rm => { if (rm.away) for (const [n, a] of Object.entries(rm.away)) if (Date.now() - a.at > 6 * 3600e3) delete rm.away[n]; });
+  Object.values(rooms).forEach(rm => { if (!names(rm).length && !rm.members.size && rm.emptyAt && Date.now() - rm.emptyAt > GRACE) { archiveRoom(rm); delete rooms[rm.code]; } });
 }, 30000);
 
 // هر دقیقه برای کسی که در حال تماشاست ۱ امتیاز
@@ -123,7 +143,7 @@ app.post('/upload', (req, res) => {
   const out = fs.createWriteStream('uploads/' + name);
   req.pipe(out);
   out.on('finish', () => {
-    if (rooms[code]) { rm.media = '/media/' + name; rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
+    if (rooms[code]) { recordUpload(rm, name, (upToks[req.query.tok] || {}).name, out.bytesWritten); rm.media = '/media/' + name; rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
     res.json({ ok: 1 });
   });
   req.on('aborted', () => { out.destroy(); fs.unlink('uploads/' + name, () => {}); });
@@ -149,7 +169,7 @@ app.post('/upload-chunk', (req, res) => {
     p.got.add(i);
     if (p.got.size === n && !p.done && fs.statSync(path).size === size) {
       p.done = true; fs.renameSync(path, 'uploads/' + p.name); delete parts[id];
-      if (rooms[code]) { rm.local = null; rm.media = '/media/' + p.name; rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
+      if (rooms[code]) { recordUpload(rm, p.name, (upToks[req.query.tok] || {}).name, size); rm.local = null; rm.media = '/media/' + p.name; rm.state = { playing: false, time: 0, at: Date.now() }; bcast(rm, { t: 'media', url: rm.media }); }
     }
     res.json({ ok: 1 });
   });
@@ -168,9 +188,9 @@ app.post('/voice', (req, res) => {
   req.pipe(out);
   out.on('finish', () => { if (bad) return; chatPush(rm, { t: 'chat', name: u.name, text: '🎤', voice: '/media/' + name, dur }); res.json({ ok: 1 }); });
 });
-// پاک کردن فایل‌های قدیمی‌تر از ۱۲ ساعت
+// پاک کردن فایل‌های قدیمی‌تر از ۲۴ ساعت
 setInterval(() => fs.readdirSync('uploads').forEach(f => {
-  const p = 'uploads/' + f; if (Date.now() - fs.statSync(p).mtimeMs > 12 * 3600e3) fs.unlink(p, () => {});
+  const p = 'uploads/' + f; if (Date.now() - fs.statSync(p).mtimeMs > MEDIA_TTL) fs.unlink(p, () => {});
 }), 3600e3);
 
 
@@ -221,8 +241,32 @@ app.get('/api/ice', (q, r) => {
 });
 app.get('/api/admin/stats', (q, r) => {
   if (!admin(q, r)) return;
-  r.json({ users: Object.keys(db.users).length, lobbiesTotal: db.stats.lobbies, online: wss.clients.size, vipCodesUsed: Object.keys(db.used).length,
-    rooms: Object.values(rooms).map(x => ({ code: x.code, title: x.title, type: x.type, count: names(x).length, members: names(x) })) });
+  r.json({ users: Object.keys(db.users).length, lobbiesTotal: db.stats.lobbies, online: wss.clients.size, chats: Object.keys(db.chats).length, vipCodesUsed: Object.keys(db.used).length,
+    rooms: Object.values(rooms).map(x => ({ code: x.code, title: x.title, type: x.type, count: names(x).length, members: names(x), by: x.by || '', at: x.at || 0, media: liveUploads(x.uploads).length, msgs: (x.chat || []).length })),
+    archive: Object.values(db.archive).sort((a, b) => b.closedAt - a.closedAt).slice(0, 300).map(a => ({ id: a.id, code: a.code, type: a.type, by: a.by, at: a.at, closedAt: a.closedAt, count: a.seen.length, media: liveUploads(a.uploads).length, msgs: a.chat.length })) });
+});
+// ===== بایگانی لابی‌ها برای مدیر =====
+db.archive = db.archive || {};
+const liveUploads = l => (l || []).filter(u => Date.now() - u.at < MEDIA_TTL && fs.existsSync('uploads/' + String(u.url).slice(7)));
+function recordUpload(rm, name, by, size) { (rm.uploads = rm.uploads || []).push({ url: '/media/' + name, by: by || '', at: Date.now(), size: size || 0 }); }
+function archiveRoom(rm) { // لابی بسته می‌شود ولی برای مدیر می‌ماند
+  if (!rm || rm.archived) return; rm.archived = true;
+  const id = rm.code + '-' + (rm.at || Date.now());
+  db.archive[id] = { id, code: rm.code, type: rm.type, title: rm.title, by: rm.by || '', at: rm.at || 0, closedAt: Date.now(), seen: [...(rm.seen || [])], chat: rm.chat || [], uploads: rm.uploads || [], media: rm.media || '' };
+  const ids = Object.keys(db.archive); if (ids.length > 1000) ids.sort((a, b) => db.archive[a].closedAt - db.archive[b].closedAt).slice(0, ids.length - 1000).forEach(k => delete db.archive[k]);
+  save();
+}
+function restoreRoom(id) {
+  const a = db.archive[id]; if (!a || rooms[a.code]) return null;
+  const r = rooms[a.code] = { code: a.code, type: a.type, title: a.title, media: a.media || '', state: { playing: false, time: 0, at: Date.now() }, members: new Map(), chat: a.chat || [], emptyAt: Date.now(), by: a.by, at: a.at, seen: new Set(a.seen || []), uploads: a.uploads || [] };
+  delete db.archive[id]; save(); return r;
+}
+const upInfo = u => { const left = u.at + MEDIA_TTL - Date.now(); return { url: u.url, by: u.by, at: u.at, size: u.size, left: Math.max(0, left), ok: left > 0 && fs.existsSync('uploads/' + String(u.url).slice(7)) }; };
+app.get('/api/admin/lobby', (q, r) => {
+  if (!admin(q, r)) return;
+  const id = String(q.query.id || ''), code = String(q.query.code || ''), a = id ? db.archive[id] : null, x = a || rooms[code];
+  if (!x) return bad(r, 404, 'پیدا نشد');
+  r.json({ live: !a, code: x.code, title: x.title, type: x.type, by: x.by || '', at: x.at || 0, closedAt: a ? a.closedAt : 0, seen: a ? a.seen : [...(x.seen || [])], now: a ? [] : names(x), chat: x.chat || [], uploads: (x.uploads || []).map(upInfo) });
 });
 app.get('/api/admin/support', (q, r) => { if (admin(q, r)) r.json(db.support.slice(-50).reverse()); });
 
@@ -299,6 +343,149 @@ app.post('/api/auth/update', (q, r) => {
 });
 app.get('/api/auth/me', (q, r) => { const s = verifySession(String(q.headers.authorization || '').slice(7)); r.json(s ? { ok: 1, u: s.u, n: s.n } : { ok: 0 }); });
 app.get('/api/admin/codes', (q, r) => { if (admin(q, r)) r.json(adminCodes.filter(c => Date.now() - c.at < 600000).reverse()); });
+
+// ===== اعلان واقعی (Web Push) بدون کتابخانه‌ی خارجی =====
+const b64u = b => Buffer.from(b).toString('base64url');
+const hkdf = (salt, ikm, info, len) => Buffer.from(crypto.hkdfSync('sha256', ikm, salt, info, len));
+let VAPID = null;
+function vapid() { // کلید VAPID از ADMIN_KEY ساخته می‌شود تا با ری‌استارت عوض نشود
+  if (VAPID) return VAPID;
+  const seed = crypto.createHmac('sha256', ADMIN_KEY).update('vapid-v1').digest(), e = crypto.createECDH('prime256v1'); e.setPrivateKey(seed);
+  const pub = e.getPublicKey();
+  VAPID = { pub: b64u(pub), key: crypto.createPrivateKey({ key: { kty: 'EC', crv: 'P-256', d: b64u(seed), x: b64u(pub.subarray(1, 33)), y: b64u(pub.subarray(33, 65)) }, format: 'jwk' }) };
+  return VAPID;
+}
+function vapidAuth(endpoint) {
+  const v = vapid(), head = b64u(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
+  const body = b64u(JSON.stringify({ aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: 'https://dorham-watch.onrender.com' }));
+  const sig = crypto.sign('sha256', Buffer.from(head + '.' + body), { key: v.key, dsaEncoding: 'ieee-p1363' });
+  return `vapid t=${head}.${body}.${b64u(sig)}, k=${v.pub}`;
+}
+function encryptPush(sub, payload) { // RFC 8291 (aes128gcm)
+  const ua = Buffer.from(sub.keys.p256dh, 'base64url'), auth = Buffer.from(sub.keys.auth, 'base64url');
+  const as = crypto.createECDH('prime256v1'); as.generateKeys(); const asPub = as.getPublicKey(), salt = crypto.randomBytes(16);
+  const prk = hkdf(auth, as.computeSecret(ua), Buffer.concat([Buffer.from('WebPush: info\0'), ua, asPub]), 32);
+  const cek = hkdf(salt, prk, Buffer.from('Content-Encoding: aes128gcm\0'), 16), nonce = hkdf(salt, prk, Buffer.from('Content-Encoding: nonce\0'), 12);
+  const c = crypto.createCipheriv('aes-128-gcm', cek, nonce), ct = Buffer.concat([c.update(Buffer.concat([Buffer.from(payload), Buffer.from([2])])), c.final(), c.getAuthTag()]);
+  const rs = Buffer.alloc(4); rs.writeUInt32BE(4096);
+  return Buffer.concat([salt, rs, Buffer.from([asPub.length]), asPub, ct]);
+}
+function sendPush(sub, obj) {
+  return new Promise(res => {
+    try {
+      const body = encryptPush(sub, JSON.stringify(obj)), u = new URL(sub.endpoint);
+      const rq = (u.protocol === 'http:' ? http : https).request(u, { method: 'POST', timeout: 8000, headers: { 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', 'Content-Length': body.length, TTL: 3600, Urgency: 'high', Authorization: vapidAuth(sub.endpoint) } }, r => { r.resume(); res(r.statusCode); });
+      rq.on('error', () => res(0)); rq.on('timeout', () => { rq.destroy(); res(0); }); rq.end(body);
+    } catch { res(0); }
+  });
+}
+async function pushSub(ep, obj) { const rec = db.subs[ep]; if (!rec || !ADMIN_KEY) return; const st = await sendPush(rec.sub, obj); if (st === 404 || st === 410) { delete db.subs[ep]; save(); } }
+const connectedEps = () => new Set([...wss.clients].filter(w => w.readyState === 1 && w.ep).map(w => w.ep));
+function pushAway(rm, except, obj) {
+  if (!rm.away) return; const on = connectedEps();
+  for (const [n, a] of Object.entries(rm.away)) { if (n === except || on.has(a.ep) || Date.now() - a.last < 5000 || !db.subs[a.ep]) continue; a.last = Date.now(); pushSub(a.ep, obj); }
+}
+function notifyNewLobby(r, by, src) { // فقط لابی‌های عمومی
+  wss.clients.forEach(w => { if (w !== src && w.readyState === 1) w.send(JSON.stringify({ t: 'newlobby', code: r.code, by })); });
+  const on = connectedEps();
+  Object.entries(db.subs).forEach(([ep, rec]) => { if (rec.name !== by && !on.has(ep)) pushSub(ep, { title: 'لابی جدید 🎬', body: `${by} یه لابی ساخت — کد ${r.code}`, tag: 'lobby', url: '/?room=' + r.code }); });
+}
+db.subs = db.subs || {};
+const PUSH_OK = /^https:\/\/(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9.-]+\.push\.apple\.com|[a-z0-9.-]+\.notify\.windows\.com)\//;
+app.get('/api/push/key', (q, r) => r.json({ key: ADMIN_KEY ? vapid().pub : '' }));
+app.post('/api/push/subscribe', (q, r) => {
+  const s = q.body.sub, n = String(q.body.name || '').slice(0, 20);
+  const okEp = s && typeof s.endpoint === 'string' && s.endpoint.length < 700 && (PUSH_OK.test(s.endpoint) || (process.env.PUSH_ALLOW_LOCAL && /^http:\/\/localhost[:/]/.test(s.endpoint)));
+  if (!ADMIN_KEY || !okEp || !s.keys || typeof s.keys.p256dh !== 'string' || typeof s.keys.auth !== 'string') return bad(r, 400, 'bad');
+  if (!db.subs[s.endpoint] && Object.keys(db.subs).length >= 1000) return bad(r, 429, 'full');
+  db.subs[s.endpoint] = { sub: { endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } }, name: n, at: Date.now() }; save(); r.json({ ok: 1 });
+});
+app.post('/api/push/unsubscribe', (q, r) => { delete db.subs[String(q.body.endpoint || '')]; save(); r.json({ ok: 1 }); });
+
+// ===== گپ‌ها (گروه‌های متنی دائمی) =====
+db.chats = db.chats || {};
+const chatPresent = {}, chatToks = {};
+let gSaveT = 0; const saveSoon = () => { if (!gSaveT) gSaveT = setTimeout(() => { gSaveT = 0; save(); }, 2000); };
+const gsend = (w, o) => { if (w.readyState === 1) w.send(JSON.stringify(o)); };
+const gbcast = (c, o) => (chatPresent[c.code] || []).forEach(w => gsend(w, o));
+const chatInfo = c => ({ code: c.code, title: c.title, type: c.type, count: Object.keys(c.members).length, online: (chatPresent[c.code] || new Set()).size });
+const chatMembers = c => { const here = new Set([...(chatPresent[c.code] || [])].map(w => w.gname)); return Object.keys(c.members).map(n => ({ n, on: here.has(n) })); };
+const chatAvs = c => { const o = {}; Object.entries(c.members).sort((a, b) => b[1].at - a[1].at).slice(0, 30).forEach(([n, v]) => { if (v.av) o[n] = v.av; }); return o; };
+function gDrop(ws) {
+  (ws.chatCodes || []).forEach(k => { const st = chatPresent[k], c = db.chats[k]; if (st) { st.delete(ws); if (c) gbcast(c, { t: 'gmembers', code: k, members: chatMembers(c) }); } });
+}
+function pushChatOffline(c, msg) {
+  const here = new Set([...(chatPresent[c.code] || [])]), on = connectedEps(), body = msg.k === 's' ? 'استیکر' : msg.k === 'i' ? '🖼 تصویر / گیف' : String(msg.text).slice(0, 120);
+  wss.clients.forEach(w => { if (w.gname && w.gname !== msg.name && c.members[w.gname] && !here.has(w)) gsend(w, { t: 'gnotify', code: c.code, title: c.title, by: msg.name, text: body }); });
+  for (const [n, v] of Object.entries(c.members)) {
+    if (n === msg.name || !v.ep || on.has(v.ep) || !db.subs[v.ep] || Date.now() - (v.last || 0) < 5000) continue;
+    v.last = Date.now(); pushSub(v.ep, { title: `${msg.name} · ${c.title}`, body, tag: 'g-' + c.code, url: '/?chat=' + c.code });
+  }
+}
+function handleG(ws, m) {
+  if (m.t === 'glist') {
+    const pub = Object.values(db.chats).filter(c => c.type === 'public').sort((a, b) => chatInfo(b).online - chatInfo(a).online || b.at - a.at).slice(0, 30).map(chatInfo);
+    const mine = (Array.isArray(m.codes) ? m.codes.slice(0, 30) : []).map(k => db.chats[String(k)]).filter(Boolean).map(chatInfo);
+    return gsend(ws, { t: 'glist', pub, mine });
+  }
+  const name = String(m.name || ws.gname || '').trim().slice(0, 20);
+  if (!name) return gsend(ws, { t: 'gerror', msg: 'اول یک نام انتخاب کن' });
+  ws.gname = name;
+  if (m.t === 'gcreate') {
+    const title = String(m.title || '').trim().slice(0, 30);
+    if (!title) return gsend(ws, { t: 'gerror', msg: 'اسم گپ را بنویس' });
+    if (Object.keys(db.chats).length >= 300) return gsend(ws, { t: 'gerror', msg: 'ظرفیت گپ‌ها پر است' });
+    if (Object.values(db.chats).filter(c => c.owner === name).length >= 5) return gsend(ws, { t: 'gerror', msg: 'حداکثر ۵ گپ می‌توانی بسازی' });
+    let code; do { code = String(crypto.randomInt(10000, 100000)); } while (db.chats[code]);
+    db.chats[code] = { code, title, type: m.type === 'private' ? 'private' : 'public', owner: name, at: Date.now(), members: {}, msgs: [] };
+    m = { ...m, t: 'gjoin', code, created: true };
+  }
+  if (m.t === 'gjoin') {
+    const c = db.chats[String(m.code)];
+    if (!c) return gsend(ws, { t: 'gerror', msg: 'گپی با این کد پیدا نشد' });
+    const old = c.members[name];
+    if (!old && Object.keys(c.members).length >= 100) return gsend(ws, { t: 'gerror', msg: 'این گپ پر است' });
+    const av = validAv(m.av) || (old && old.av) || '';
+    c.members[name] = { ep: ws.ep || (old && old.ep) || '', av, at: Date.now(), last: old ? old.last : 0 };
+    (chatPresent[c.code] = chatPresent[c.code] || new Set()).add(ws); (ws.chatCodes = ws.chatCodes || new Set()).add(c.code);
+    const gtok = crypto.randomBytes(8).toString('hex'); chatToks[gtok] = c.code;
+    gsend(ws, { t: 'gjoined', code: c.code, title: c.title, type: c.type, owner: c.owner, created: !!m.created, members: chatMembers(c), avs: chatAvs(c), msgs: c.msgs.slice(-100), gtok });
+    gbcast(c, { t: 'gmembers', code: c.code, members: chatMembers(c) });
+    if (av && !old) gbcast(c, { t: 'gav', code: c.code, name, av });
+    return saveSoon();
+  }
+  const c = db.chats[String(m.code)];
+  if (!c || !c.members[name]) return;
+  if (m.t === 'gleave') {
+    const st = chatPresent[c.code]; if (st) st.delete(ws); if (ws.chatCodes) ws.chatCodes.delete(c.code);
+    if (!m.stay) { delete c.members[name]; if (!Object.keys(c.members).length) delete db.chats[c.code]; }
+    if (db.chats[c.code]) gbcast(c, { t: 'gmembers', code: c.code, members: chatMembers(c) });
+    return saveSoon();
+  }
+  if (m.t === 'gmsg') {
+    if (!chatPresent[c.code] || !chatPresent[c.code].has(ws)) return;
+    const now = Date.now(); if (now - (ws.gl || 0) < 300) return; ws.gl = now;
+    const msg = { id: (c.seq = (c.seq || 0) + 1), name, at: now, k: 't' };
+    if (m.k === 's' && /^[a-z0-9_]{1,24}$/.test(String(m.id))) { msg.k = 's'; msg.sid = String(m.id); }
+    else if (m.k === 'i' && /^\/media\/[a-f0-9]{16}\.(gif|png|jpg|webp)$/.test(String(m.url)) && fs.existsSync('uploads/' + String(m.url).slice(7))) { msg.k = 'i'; msg.url = String(m.url); }
+    else { const t = String(m.text || '').trim().slice(0, 500); if (!t) return; msg.text = t; }
+    c.msgs.push(msg); if (c.msgs.length > 200) c.msgs.shift();
+    gbcast(c, { t: 'gmsg', code: c.code, msg }); pushChatOffline(c, msg); saveSoon();
+  }
+}
+app.post('/chat-upload', (req, res) => {
+  const code = chatToks[String(req.query.tok || '')], ext = String(req.query.ext || '').toLowerCase();
+  if (!code || !db.chats[code]) return res.status(403).end('forbidden');
+  if (!['gif', 'png', 'jpg', 'webp'].includes(ext)) return res.status(400).end('bad');
+  const chunks = []; let n = 0, dead = false;
+  req.on('data', d => { n += d.length; if (n > 8e6) { if (!dead) { dead = true; res.status(413).end(); } } else if (!dead) chunks.push(d); });
+  req.on('end', () => {
+    if (dead) return; const b = Buffer.concat(chunks), sig = b.subarray(0, 12).toString('latin1');
+    const ok = sig.startsWith('GIF8') || (b[0] === 0x89 && sig.slice(1, 4) === 'PNG') || (b[0] === 0xff && b[1] === 0xd8) || (sig.startsWith('RIFF') && sig.slice(8, 12) === 'WEBP');
+    if (!ok) return res.status(400).end('bad');
+    const name = crypto.randomBytes(8).toString('hex') + '.' + ext; fs.writeFileSync('uploads/' + name, b); res.json({ url: '/media/' + name });
+  });
+});
 
 // ===== دعوت دوستان =====
 db.refd = db.refd || {}; db.refip = db.refip || {};
