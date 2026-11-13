@@ -92,41 +92,11 @@ body.ubg .bg{display:none}
 #msgbn span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 input[type=checkbox]{width:22px;height:22px;padding:0;flex:none}
 .chip{display:inline-block;padding:4px 12px;margin:3px;border-radius:14px;border:1px solid var(--gb);background:var(--glass);color:var(--tx)}
-.av{width:46px;height:46px;border-radius:50%;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;color:#fff;flex:none;transition:box-shadow .15s}
-.av.sm{width:30px;height:30px;font-size:14px}
-.av.talk{box-shadow:0 0 0 3px var(--red2),0 0 16px var(--glow)}
-.callbar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:16px;margin:8px 0;background:linear-gradient(90deg,var(--red),var(--red2));color:#fff;cursor:pointer}
-.callbar b{flex:1;text-align:center;font-size:15px}
-.avs{display:flex;direction:ltr}.avs .av{margin-left:-8px;border:2px solid rgba(255,255,255,.75)}.avs .av:first-child{margin-left:0}
-.cp{position:fixed;left:0;right:0;bottom:0;height:76vh;z-index:70;display:flex;flex-direction:column;padding:14px 14px calc(env(safe-area-inset-bottom,0px) + 14px);border-radius:28px 28px 0 0;background:rgb(14,17,26);border-top:1px solid var(--gb);box-shadow:0 -10px 40px rgba(0,0,0,.5);color:#fff}
-.cph{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}.cph b{font-size:18px}
-.cph button{background:none;border:0;color:#fff;font-size:26px;cursor:pointer}
-.cpl{background:rgba(255,255,255,.07);border-radius:20px;padding:4px 14px;margin:8px 0;overflow-y:auto;max-height:42vh}
-.cprow{display:flex;align-items:center;gap:12px;padding:10px 0;width:100%;background:none;border:0;border-bottom:1px solid rgba(255,255,255,.07);color:#fff;font:inherit;text-align:right;cursor:pointer}
-.cpl>.cprow:last-child{border-bottom:0}
-.cprow .col{flex:1}.cprow small{display:block;color:var(--mu)}.cprow .ic{width:46px;text-align:center;font-size:20px}
-.cpc{margin-top:auto;display:flex;justify-content:space-around;align-items:flex-end;direction:ltr;padding:10px 0}
-.cpc>div{text-align:center}.cpc small{display:block;margin-top:8px;font-size:15px}
-.cm{width:132px;height:132px;border-radius:50%;border:0;background:linear-gradient(135deg,var(--red2),var(--red));color:#fff;font-size:44px;box-shadow:0 0 40px var(--glow);cursor:pointer}
-.cm.live{animation:cpulse 1.8s infinite}.cm.join{background:linear-gradient(135deg,#3ddc84,#1b9e55)}
-@keyframes cpulse{50%{box-shadow:0 0 60px var(--glow),0 0 0 14px rgba(255,255,255,.08)}}
-.cb{width:62px;height:62px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:26px;cursor:pointer}.cb.red{background:#b3262f}
 </style>
 </head>
 <body>
 <div class="bg"><i></i><i></i></div><button id="wrench" onclick="go('account')" aria-label="تنظیمات حساب">🔧</button>
 <div id="msgbn" onclick="this.classList.remove('on')"><b></b><span></span></div>
-<div class="cp" id="callpanel" hidden>
-  <div class="cph"><button onclick="closeCall()" aria-label="کوچک کردن">⌄</button><b id="cptitle"></b></div>
-  <div class="cpl" id="cplist"></div>
-  <div class="cpl"><button class="cprow" onclick="inviteCall()"><span class="ic">👤➕</span><span>دعوت اعضا</span></button></div>
-  <div class="cpc" id="cpin"><div><button class="cm join" onclick="joinCall()">📞</button><small>پیوستن به تماس</small></div></div>
-  <div class="cpc" id="cpon" hidden>
-    <div><button class="cb" id="spkbtn" onclick="toggleSpk()">🔊</button><small>بلندگو</small></div>
-    <div><button class="cm" id="micbtn" onclick="toggleMute()">🔇</button><small id="micl"></small></div>
-    <div><button class="cb red" onclick="endCall()">📞</button><small>ترک کردن</small></div>
-  </div>
-</div>
 <div id="ubg"></div><div class="fx" id="fx"></div>
 
 <section class="view" id="home">
@@ -158,8 +128,9 @@ input[type=checkbox]{width:22px;height:22px;padding:0;flex:none}
 <section class="view" id="room" hidden>
   <button class="back" onclick="leaveRoom()">← خروج از لابی</button>
   <div class="row"><span>کد لابی: <b id="rcode"></b></span><span class="tag" id="rcount"></span></div>
-  <div class="callbar" id="callbar" onclick="openCall()" hidden><span class="avs" id="cbav"></span><b id="cbtxt"></b><span id="cbmic"></span></div>
-  <div id="audios" hidden></div>
+  <button class="btn alt" id="callbtn" onclick="toggleCall()">📞 پیوستن به تماس صوتی</button>
+  <button class="btn alt" id="mutebtn" onclick="toggleMute()" hidden>🔇 قطع میکروفن</button>
+  <div id="callst"></div><div id="audios" hidden></div>
   <video id="v" controls playsinline></video>
   <input id="murl" placeholder="لینک مستقیم ویدیو یا موزیک (mp4 / mp3 / webm)" dir="ltr">
   <button class="btn alt" onclick="setMedia()">پخش برای همه</button>
@@ -185,8 +156,6 @@ input[type=checkbox]{width:22px;height:22px;padding:0;flex:none}
   <h2>حساب کاربری</h2>
   <input id="uname" placeholder="نام نمایشی">
   <button class="btn" onclick="saveName()">ذخیره</button>
-  <input id="pfile" type="file" accept="image/*" hidden onchange="setAvatar(this.files[0])">
-  <button class="btn alt" onclick="document.querySelector('#pfile').click()">🖼 تغییر عکس پروفایل</button>
   <label class="row"><span>📳 لرزش گوشی هنگام پیام</span><input type="checkbox" id="optvib" onchange="setVib(this.checked)"></label>
   <label class="row"><span>🔔 اعلان پیام وقتی برنامه در پس‌زمینه است</span><input type="checkbox" id="optnot" onchange="setNot(this.checked)"></label>
   <details style="margin-top:18px"><summary style="color:var(--mu)">مدیر</summary>
@@ -265,21 +234,21 @@ function connect(cb) {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
   ws.onopen = cb;
   ws.onmessage = e => handle(JSON.parse(e.data));
-  ws.onclose = () => { stopCall(); callNames = []; callMutedNames = []; closeCall(); if (inRoom) { toast('اتصال قطع شد؛ در حال اتصال مجدد...'); retry(); } };
+  ws.onclose = () => { stopCall(); callNames = []; if (inRoom) { toast('اتصال قطع شد؛ در حال اتصال مجدد...'); retry(); } };
 }
-const createLobby = () => needName() && connect(() => send({ t: 'create', auth: sess, av: myAv(), name: me, type: $('#ltype').value }));
-const joinLobby = c => needName() && connect(() => send({ t: 'join', auth: sess, av: myAv(), name: me, code: String(c).trim() }));
+const createLobby = () => needName() && connect(() => send({ t: 'create', auth: sess, name: me, type: $('#ltype').value }));
+const joinLobby = c => needName() && connect(() => send({ t: 'join', auth: sess, name: me, code: String(c).trim() }));
 // ===== بازگشت خودکار به لابی =====
 let retryT = 0;
 function retry() {
   clearTimeout(retryT);
   const c = localStorage.room; if (!c || !me) return;
-  retryT = setTimeout(() => { if (ws && ws.readyState === 1) return; ws = null; connect(() => send({ t: 'join', auth: sess, av: myAv(), name: me, code: c })); if (ws) ws.onerror = () => {}; }, 2000);
+  retryT = setTimeout(() => { if (ws && ws.readyState === 1) return; ws = null; connect(() => send({ t: 'join', auth: sess, name: me, code: c })); if (ws) ws.onerror = () => {}; }, 2000);
 }
-const resume = () => { if (localStorage.room && me && !(ws && ws.readyState === 1)) { ws = null; connect(() => send({ t: 'join', auth: sess, av: myAv(), name: me, code: localStorage.room })); } };
+const resume = () => { if (localStorage.room && me && !(ws && ws.readyState === 1)) { ws = null; connect(() => send({ t: 'join', auth: sess, name: me, code: localStorage.room })); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resume(); });
 addEventListener('online', resume);
-function leaveRoom() { endCall(); closeCall(); send({ t: 'leave' }); localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
+function leaveRoom() { endCall(); send({ t: 'leave' }); localStorage.removeItem('room'); clearTimeout(retryT); if (rec && rec.state === 'recording') stopRec(false); inRoom = false; ws && ws.close(); $('#v').pause(); go('home'); }
 
 const v = $('#v');
 const remote = fn => { applying = true; fn(); setTimeout(() => applying = false, 400); };
@@ -338,7 +307,7 @@ function handle(m) {
   if (m.t === 'error') { toast(m.msg); localStorage.removeItem('room'); if (inRoom) { inRoom = false; go('home'); } }
   else if (m.t === 'joined') {
     inRoom = true; tok = m.tok; if (!m.ghost) localStorage.room = m.code; go('room'); $('#rcode').textContent = m.code; $('#chat').innerHTML = ''; (m.chat || []).forEach(addChat);
-    members(m.members); if (m.local) showLocalMsg(m.local); callNames = m.calls || []; callMutedNames = m.cmuted || []; avs = m.avs || {}; updCall();
+    members(m.members); if (m.local) showLocalMsg(m.local); callNames = m.calls || []; updCall();
     if (m.media) { lmeta = null; $('#lmsg').hidden = true; v.src = m.media; v.onloadedmetadata = () => remote(() => { v.currentTime = m.time; if (m.playing) v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); }); }
   }
   else if (m.t === 'localmedia') showLocalMsg(m)
@@ -347,9 +316,7 @@ function handle(m) {
   else if (m.t === 'callon') { if (localStream) toast(m.name + ' به تماس پیوست'); }
   else if (m.t === 'calloff') { dropPeer(m.name); if (localStream) toast(m.name + ' از تماس خارج شد'); }
   else if (m.t === 'rtc') onRtc(m);
-  else if (m.t === 'members') { members(m.members); if (m.avs) { avs = m.avs; updCall(); } }
-  else if (m.t === 'avs') { avs = m.avs || {}; updCall(); }
-  else if (m.t === 'callmute') { callMutedNames = m.muted || []; updCall(); }
+  else if (m.t === 'members') members(m.members);
   else if (m.t === 'media') { lmeta = null; $('#lmsg').hidden = true; v.src = m.url; $('#murl').value = m.url; }
   else if (m.t === 'play') remote(() => { v.currentTime = m.time; v.play().catch(() => toast('برای پخش، روی ویدیو بزن')); });
   else if (m.t === 'pause') remote(() => { v.currentTime = m.time; v.pause(); });
@@ -498,18 +465,18 @@ async function shareApp() {
 }
 
 // ===== تماس صوتی داخل لابی (WebRTC) =====
-let localStream = null, pcs = {}, ice = null, muted = false, callNames = [], callMutedNames = [], deaf = false, avs = {}, meters = {}, actx = null;
+let localStream = null, pcs = {}, ice = null, muted = false, callNames = [];
 async function iceCfg() { if (!ice) try { ice = await (await fetch('/api/ice')).json(); } catch { ice = [{ urls: 'stun:stun.l.google.com:19302' }]; } return ice; }
 function mkPc(name) {
   if (pcs[name]) return pcs[name];
   const pc = new RTCPeerConnection({ iceServers: ice }); pc.pend = []; pcs[name] = pc;
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
   pc.onicecandidate = e => e.candidate && send({ t: 'rtc', to: name, data: { c: e.candidate } });
-  pc.ontrack = e => { let a = document.getElementById('a_' + name); if (!a) { a = document.createElement('audio'); a.id = 'a_' + name; a.autoplay = true; a.playsInline = true; $('#audios').append(a); } a.srcObject = e.streams[0]; a.muted = deaf; watch(name, e.streams[0]); a.play().catch(() => {}); };
+  pc.ontrack = e => { let a = document.getElementById('a_' + name); if (!a) { a = document.createElement('audio'); a.id = 'a_' + name; a.autoplay = true; a.playsInline = true; $('#audios').append(a); } a.srcObject = e.streams[0]; a.play().catch(() => {}); };
   pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') dropPeer(name); else updCall(); };
   return pc;
 }
-function dropPeer(n) { delete meters[n]; const pc = pcs[n]; if (pc) { pc.close(); delete pcs[n]; } const a = document.getElementById('a_' + n); if (a) a.remove(); updCall(); }
+function dropPeer(n) { const pc = pcs[n]; if (pc) { pc.close(); delete pcs[n]; } const a = document.getElementById('a_' + n); if (a) a.remove(); updCall(); }
 async function callPeer(n) { const pc = mkPc(n); await pc.setLocalDescription(await pc.createOffer()); send({ t: 'rtc', to: n, data: { d: pc.localDescription } }); }
 async function onRtc(m) {
   if (!localStream) return; const pc = mkPc(m.from), d = m.data || {};
@@ -521,74 +488,29 @@ async function onRtc(m) {
     } else if (d.c) { if (pc.remoteDescription) await pc.addIceCandidate(d.c); else pc.pend.push(d.c); }
   } catch {}
 }
-async function joinCall() {
-  if (localStream) return;
+async function toggleCall() {
+  if (localStream) return endCall();
   if (!navigator.mediaDevices) return toast('مرورگر از تماس پشتیبانی نمی‌کند');
   try { await iceCfg(); localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
   catch { return toast('اجازه‌ی میکروفن لازم است'); }
-  muted = true; localStream.getAudioTracks().forEach(t => t.enabled = false); // مثل تلگرام: بی‌صدا وارد می‌شوی
-  watch(me, localStream); send({ t: 'callon' }); send({ t: 'mute', muted: true }); updCall();
+  send({ t: 'callon' }); updCall();
 }
-function stopCall() { delete meters[me]; if (localStream) localStream.getTracks().forEach(t => t.stop()); localStream = null; muted = false; Object.keys(pcs).forEach(dropPeer); updCall(); }
+function stopCall() { if (localStream) localStream.getTracks().forEach(t => t.stop()); localStream = null; muted = false; Object.keys(pcs).forEach(dropPeer); updCall(); }
 function endCall() { if (localStream) send({ t: 'calloff' }); stopCall(); }
-function toggleMute() { if (!localStream) return; muted = !muted; localStream.getAudioTracks().forEach(t => t.enabled = !muted); send({ t: 'mute', muted }); updCall(); }
-function toggleSpk() { deaf = !deaf; document.querySelectorAll('#audios audio').forEach(a => a.muted = deaf); $('#spkbtn').textContent = deaf ? '🔈' : '🔊'; }
-function openCall() { $('#callpanel').hidden = false; if (actx && actx.state === 'suspended') actx.resume(); renderCp(); }
-function closeCall() { $('#callpanel').hidden = true; }
-async function inviteCall() {
-  const code = $('#rcode').textContent, d = { title: 'Dor Ham', text: 'بیا توی لابی دورهم! کد لابی: ' + code, url: `${location.origin}/?room=${code}` };
-  if (navigator.share) { try { await navigator.share(d); } catch {} return; }
-  try { await navigator.clipboard.writeText(d.text + '\n' + d.url); toast('لینک کپی شد'); } catch { toast('کد لابی: ' + code); }
-}
-const myAv = () => localStorage.avatar || '';
-function setAvatar(f) {
-  if (!f) return; const img = new Image();
-  img.onload = () => {
-    const c = document.createElement('canvas'), s = Math.min(img.width, img.height); c.width = c.height = 96;
-    c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 96, 96);
-    localStorage.avatar = c.toDataURL('image/jpeg', .7); URL.revokeObjectURL(img.src); toast('عکس پروفایل ذخیره شد'); if (inRoom) send({ t: 'setav', av: myAv() });
-  };
-  img.src = URL.createObjectURL(f);
-}
-const AVC = ['#e5527a', '#8e5ce0', '#3e8ed0', '#2fa68c', '#d98c2b', '#c44e4e'];
-function avEl(n, cls) {
-  const d = document.createElement('div'); d.className = 'av ' + (cls || ''); d.dataset.n = n;
-  if (avs[n]) d.style.backgroundImage = `url(${avs[n]})`;
-  else { let x = 0; for (const ch of n) x = (x * 31 + ch.charCodeAt(0)) >>> 0; d.style.background = AVC[x % AVC.length]; d.textContent = [...n][0] || '?'; }
-  return d;
-}
-function watch(n, stream) { // نشانگر «در حال صحبت»
-  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const an = actx.createAnalyser(); an.fftSize = 256; actx.createMediaStreamSource(stream).connect(an); meters[n] = an; if (actx.state === 'suspended') actx.resume(); } catch {}
-}
-setInterval(() => {
-  Object.entries(meters).forEach(([n, an]) => {
-    const a = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(a); const v = a.reduce((s, x) => s + x, 0) / a.length;
-    document.querySelectorAll('.av').forEach(e => { if (e.dataset.n === n) e.classList.toggle('talk', v > 16); });
-  });
-}, 200);
-function callNamesNow() { return localStream && !callNames.includes(me) ? [...callNames, me] : callNames; }
+function toggleMute() { if (!localStream) return; muted = !muted; localStream.getAudioTracks().forEach(t => t.enabled = !muted); updCall(); }
 function updCall() {
-  const inCall = !!localStream, names = callNamesNow(), bar = $('#callbar');
-  bar.hidden = !names.length && !inCall;
-  if (!bar.hidden) {
-    $('#cbtxt').textContent = inCall ? 'تماس صوتی' : `تماس صوتی فعال (${names.length} نفر) — بزن تا بپیوندی`;
-    $('#cbmic').textContent = inCall ? (muted ? '🔇' : '🎙') : '📞';
-    const box = $('#cbav'); box.textContent = ''; names.slice(0, 3).forEach(n => box.append(avEl(n, 'sm')));
-  }
-  if (!$('#callpanel').hidden) renderCp();
-}
-function renderCp() {
-  const inCall = !!localStream, names = callNamesNow(), box = $('#cplist');
-  $('#cptitle').textContent = 'لابی ' + $('#rcode').textContent; box.textContent = '';
-  if (!names.length) { const e = document.createElement('div'); e.className = 'cprow'; e.textContent = 'هنوز کسی توی تماس نیست'; box.append(e); }
+  const inCall = !!localStream, names = inCall && !callNames.includes(me) ? [...callNames, me] : callNames;
+  $('#callbtn').textContent = inCall ? '📴 قطع تماس' : '📞 پیوستن به تماس صوتی' + (names.length ? ` (${names.length} نفر در تماس)` : '');
+  $('#mutebtn').hidden = !inCall; $('#mutebtn').textContent = muted ? '🎙 روشن کردن میکروفن' : '🔇 قطع میکروفن';
+  const box = $('#callst'); box.textContent = '';
+  if (!names.length) return;
+  const t = document.createElement('div'); t.textContent = '🎙 در تماس صوتی:'; box.append(t);
   names.forEach(n => {
-    const r = document.createElement('div'), col = document.createElement('div'), b = document.createElement('b'), s = document.createElement('small'), m = document.createElement('span');
-    const mu = n === me ? muted : callMutedNames.includes(n); r.className = 'cprow'; col.className = 'col';
-    b.textContent = n + (n === me ? ' (تو)' : ''); s.textContent = mu ? 'بی‌صدا' : 'میکروفن روشن'; m.textContent = mu ? '🔇' : '🎙'; m.style.opacity = mu ? .6 : 1;
-    col.append(b, s); r.append(avEl(n), col, m); box.append(r);
+    const c = document.createElement('span'), p = pcs[n]; c.className = 'chip';
+    const dot = n === me ? (muted ? '🔇' : '🟢') : p && p.connectionState === 'connected' ? '🟢' : inCall ? '🟡' : '⚪';
+    c.textContent = `${dot} ${n}${n === me ? ' (تو)' : ''}`; box.append(c);
   });
-  $('#cpin').hidden = inCall; $('#cpon').hidden = !inCall;
-  const mb = $('#micbtn'); mb.textContent = muted ? '🔇' : '🎙'; mb.className = 'cm' + (muted ? '' : ' live'); $('#micl').textContent = muted ? 'صدادار کردن' : 'بی‌صدا کردن';
+  if (inCall && names.length < 2) { const w = document.createElement('div'); w.textContent = 'منتظر دیگران... (برای صدای بهتر هدفون بزن)'; box.append(w); }
 }
 
 // ===== پس‌زمینه دلخواه (VIP) =====
@@ -653,10 +575,6 @@ function setNot(on) {
   if (!('Notification' in window)) { $('#optnot').checked = false; return toast('این مرورگر از اعلان پشتیبانی نمی‌کند'); }
   Notification.requestPermission().then(p => { localStorage.notif = p === 'granted' ? '1' : '0'; $('#optnot').checked = p === 'granted'; if (p !== 'granted') toast('اجازه‌ی اعلان داده نشد'); });
 }
-
-// ورود مستقیم با لینک دعوت لابی
-{ const RM = new URLSearchParams(location.search).get('room');
-  if (RM && /^\d{4}$/.test(RM)) setTimeout(() => { if (!me) { toast('اول یک نام انتخاب کن، بعد دوباره لینک را باز کن'); go('account'); } else connect(() => send({ t: 'join', auth: sess, av: myAv(), name: me, code: RM })); }, 700); }
 applyTheme(); checkVip(); claimRef(); resume();
 </script>
 </body>
