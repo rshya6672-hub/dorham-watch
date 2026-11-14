@@ -239,6 +239,7 @@ input[type=checkbox]{width:22px;height:22px;padding:0;flex:none}
   <button class="back" onclick="go('home')">← بازگشت</button>
   <h2>👁 پنل مدیر</h2>
   <p class="pre" id="astats"></p>
+  <button class="btn" onclick="go('admu')">👥 کاربران و حساب‌ها</button>
   <div id="arooms"></div>
   <p class="pre" id="acodes"></p>
   <button class="btn alt" onclick="loadAdm()">بروزرسانی</button>
@@ -269,6 +270,20 @@ input[type=checkbox]{width:22px;height:22px;padding:0;flex:none}
 </section>
 
 <div id="imgov" onclick="this.hidden=true" hidden><img alt=""></div>
+
+<section class="view" id="admu" hidden>
+  <button class="back" onclick="go('adm')">← بازگشت به پنل مدیر</button>
+  <h2>👥 کاربران</h2><p class="pre" id="admuc"></p>
+  <input id="admus" placeholder="جستجوی اسم" oninput="filterUsers()">
+  <div id="admul"></div>
+</section>
+
+<section class="view" id="admuser" hidden>
+  <button class="back" onclick="go('admu')">← بازگشت به کاربران</button>
+  <h2 id="admut"></h2><p class="pre" id="admui"></p>
+  <b>لابی‌هایی که ساخته (فعال و بایگانی)</b><div id="admulb" style="margin:8px 0"></div>
+  <b>گپ‌هایی که ساخته</b><p class="pre" id="admuch"></p>
+</section>
 
 <section class="view" id="admd" hidden>
   <button class="back" onclick="go('adm')">← بازگشت به پنل مدیر</button>
@@ -315,6 +330,7 @@ let go = id => {
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== id);
   if (id === 'lobby') loadLobbies();
   if (id === 'chats') openChats();
+  if (id === 'admu') loadUsers();
   if (id === 'account') { $('#uname').value = me; $('#optvib').checked = localStorage.vib !== '0'; $('#optnot').checked = localStorage.notif === '1' && 'Notification' in window && Notification.permission === 'granted'; }
 };
 const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
@@ -722,6 +738,33 @@ async function showLobby(code, id) {
 function admJoin(c, id) {
   if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; inRoom = false; }
   toast('در حال ورود...'); connect(() => send({ t: 'join', name: 'مدیر', code: c, key: AK(), ghost: true, arch: id || '' }));
+}
+
+// ===== کاربران (پنل مدیر) =====
+let admUsers = [];
+async function loadUsers() {
+  try {
+    const r = await fetch('/api/admin/users', { headers: { 'x-key': AK() } }); if (!r.ok) throw 0; const d = await r.json(); admUsers = d.users;
+    $('#admuc').textContent = `${d.total} نفر تا حالا وارد برنامه شده‌اند\n${d.users.filter(u => u.online).length} نفر الان آنلاین‌اند`; filterUsers();
+  } catch { toast('خطا؛ دوباره وارد حالت مدیر شو'); }
+}
+function filterUsers() {
+  const q = $('#admus').value.trim().toLowerCase(), box = $('#admul'); box.textContent = '';
+  admUsers.filter(u => !q || u.name.toLowerCase().includes(q)).forEach(u => {
+    const b = document.createElement('button'), col = document.createElement('div'), t = document.createElement('b'), s = document.createElement('small');
+    b.className = 'grow'; col.className = 'col'; t.textContent = (u.online ? '🟢 ' : '') + u.name; s.textContent = `آخرین بازدید: ${u.online ? 'الان' : ago(u.last)} · ${u.points} امتیاز · ${u.lobbies} لابی`;
+    col.append(t, s); b.append(avEl(u.name), col); b.onclick = () => showUser(u.name); box.append(b);
+  });
+}
+async function showUser(n) {
+  const r = await fetch('/api/admin/user?name=' + encodeURIComponent(n), { headers: { 'x-key': AK() } }); if (!r.ok) return toast('پیدا نشد');
+  const d = await r.json(); go('admuser');
+  $('#admut').textContent = '👤 ' + d.name;
+  $('#admui').textContent = `اولین ورود: ${ago(d.first)}\nآخرین بازدید: ${d.online ? 'الان آنلاین است' : ago(d.last)}\nامتیاز: ${d.points}\nلابی ساخته‌شده: ${d.lobbies}\nگپ ساخته‌شده: ${d.chats.length} · عضو ${d.chatsJoined} گپ`;
+  const box = $('#admulb'); box.textContent = '';
+  [...d.live, ...d.arch].forEach(x => box.append(admRow(x, !x.live)));
+  if (!d.live.length && !d.arch.length) box.textContent = 'لابی‌ای ثبت نشده (لابی‌ها از زمان فعال شدن بایگانی ثبت می‌شوند)';
+  $('#admuch').textContent = d.chats.map(c => `${c.type === 'private' ? '🔒' : '🌐'} ${c.title} (کد ${c.code}، ${c.members} عضو)`).join('\n') || 'گپی نساخته';
 }
 showAdm();
 

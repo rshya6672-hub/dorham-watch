@@ -60,7 +60,7 @@ wss.on('connection', ws => {
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     const rm = rooms[ws.room];
-    if (m.t === 'hello') { ws.ep = String(m.ep || '').slice(0, 600); if (m.name) ws.gname = String(m.name).trim().slice(0, 20); return; }
+    if (m.t === 'hello') { ws.ep = String(m.ep || '').slice(0, 600); if (m.name) { ws.gname = String(m.name).trim().slice(0, 20); touchUser(ws.gname); } return; }
     if (['gcreate', 'gjoin', 'glist', 'gleave', 'gmsg'].includes(m.t)) return handleG(ws, m);
     if (m.t === 'create' || m.t === 'join') {
       leave(ws);
@@ -80,15 +80,15 @@ wss.on('connection', ws => {
       r.members.forEach((n, w) => { if (!ws.ghost && !w.ghost && n === nm && w !== ws) { r.members.delete(w); w.room = null; try { w.close(); } catch {} } });
       if (!ws.ghost) r.emptyAt = 0;
       if (r.away) delete r.away[nm];
-      if (!ws.ghost) (r.seen = r.seen || new Set()).add(nm);
+      if (!ws.ghost) { (r.seen = r.seen || new Set()).add(nm); ws.gname = nm; }
       ws.room = r.code; r.members.set(ws, String(m.name).slice(0, 20));
       const tok = crypto.randomBytes(8).toString('hex'); upToks[tok] = { code: r.code, name: String(m.name).slice(0, 20) };
       ws.send(JSON.stringify({ t: 'joined', ghost: !!ws.ghost, tok, code: r.code, media: r.media, playing: r.state.playing, time: curTime(r.state), members: names(r), chat: r.chat || [], local: r.local || null, calls: callList(r), cmuted: callMuted(r), avs: avMap(r) }));
       if (!ws.ghost) {
         bcast(r, { t: 'members', members: names(r), avs: avMap(r) }, ws);
-        if (!db.users[nm]) { db.users[nm] = Date.now(); save(); }
+        touchUser(nm);
       }
-      if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; db.stats.lobbies++; save(); if (r.type === 'public') notifyNewLobby(r, nm, ws); }
+      if (m.t === 'create') { db.scores[m.name] = (db.scores[m.name] || 0) + 5; db.stats.lobbies++; { const u = touchUser(nm); if (u) u.lobbies = (u.lobbies || 0) + 1; } save(); if (r.type === 'public') notifyNewLobby(r, nm, ws); }
     } else if (rm) {
       if (m.t === 'leave') leave(ws, true);
       else if (m.t === 'setav') { ws.av = validAv(m.av); bcast(rm, { t: 'avs', avs: avMap(rm) }); }
@@ -268,6 +268,29 @@ app.get('/api/admin/lobby', (q, r) => {
   if (!x) return bad(r, 404, 'پیدا نشد');
   r.json({ live: !a, code: x.code, title: x.title, type: x.type, by: x.by || '', at: x.at || 0, closedAt: a ? a.closedAt : 0, seen: a ? a.seen : [...(x.seen || [])], now: a ? [] : names(x), chat: x.chat || [], uploads: (x.uploads || []).map(upInfo) });
 });
+// ===== کاربران (برای مدیر) =====
+function touchUser(n) {
+  n = String(n || '').trim().slice(0, 20); if (!n) return null;
+  let u = db.users[n]; if (typeof u === 'number') u = db.users[n] = { first: u, last: u, lobbies: 0 };
+  if (!u) { if (Object.keys(db.users).length >= 5000) return null; u = db.users[n] = { first: Date.now(), last: Date.now(), lobbies: 0 }; saveSoon(); }
+  if (Date.now() - u.last > 60000) { u.last = Date.now(); saveSoon(); }
+  return u;
+}
+const normU = u => typeof u === 'number' ? { first: u, last: u, lobbies: 0 } : u;
+const userRow = (n, u) => ({ name: n, first: u.first, last: u.last, points: db.scores[n] || 0, lobbies: u.lobbies || 0, online: [...wss.clients].some(w => w.readyState === 1 && w.gname === n) });
+app.get('/api/admin/users', (q, r) => {
+  if (!admin(q, r)) return;
+  const all = Object.entries(db.users).map(([n, u]) => userRow(n, normU(u))).sort((a, b) => b.last - a.last);
+  r.json({ total: all.length, users: all.slice(0, 500) });
+});
+app.get('/api/admin/user', (q, r) => {
+  if (!admin(q, r)) return;
+  const n = String(q.query.name || ''), u0 = db.users[n]; if (!u0) return bad(r, 404, 'پیدا نشد');
+  const live = Object.values(rooms).filter(x => x.by === n).map(x => ({ code: x.code, type: x.type, at: x.at || 0, count: names(x).length, members: names(x), msgs: (x.chat || []).length, media: liveUploads(x.uploads).length, live: true }));
+  const arch = Object.values(db.archive).filter(a => a.by === n).sort((a, b) => b.closedAt - a.closedAt).map(a => ({ id: a.id, code: a.code, type: a.type, at: a.at, closedAt: a.closedAt, count: a.seen.length, msgs: a.chat.length, media: liveUploads(a.uploads).length }));
+  const chats = Object.values(db.chats).filter(c => c.owner === n).map(c => ({ code: c.code, title: c.title, type: c.type, members: Object.keys(c.members).length }));
+  r.json({ ...userRow(n, normU(u0)), live, arch, chats, chatsJoined: Object.values(db.chats).filter(c => c.members[n]).length });
+});
 app.get('/api/admin/support', (q, r) => { if (admin(q, r)) r.json(db.support.slice(-50).reverse()); });
 
 
@@ -430,7 +453,7 @@ function handleG(ws, m) {
   }
   const name = String(m.name || ws.gname || '').trim().slice(0, 20);
   if (!name) return gsend(ws, { t: 'gerror', msg: 'اول یک نام انتخاب کن' });
-  ws.gname = name;
+  ws.gname = name; touchUser(name);
   if (m.t === 'gcreate') {
     const title = String(m.title || '').trim().slice(0, 30);
     if (!title) return gsend(ws, { t: 'gerror', msg: 'اسم گپ را بنویس' });
