@@ -60,8 +60,9 @@ wss.on('connection', ws => {
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     const rm = rooms[ws.room];
-    if (m.t === 'hello') { ws.ep = String(m.ep || '').slice(0, 600); if (m.name) { ws.gname = String(m.name).trim().slice(0, 20); touchUser(ws.gname); } return; }
-    if (['gcreate', 'gjoin', 'glist', 'gleave', 'gmsg'].includes(m.t)) return handleG(ws, m);
+    if (m.t === 'hello') { ws.ep = String(m.ep || '').slice(0, 600); if (m.name) { ws.gname = String(m.name).trim().slice(0, 20); const uu = touchUser(ws.gname); if (uu && ws.ep && uu.ep !== ws.ep) { uu.ep = ws.ep; saveSoon(); } } return; }
+    if (m.t === 'setprofile') { const n = String(m.name || ws.gname || '').trim().slice(0, 20); if (n) { ws.gname = n; setUserProfile(n, String(m.bio || ''), m.av); } return; }
+    if (['gcreate', 'gdm', 'gjoin', 'glist', 'gleave', 'gmsg', 'gsetav', 'gprofile'].includes(m.t)) return handleG(ws, m);
     if (m.t === 'create' || m.t === 'join') {
       leave(ws);
       ws.ghost = m.t === 'join' && !!(m.ghost && ADMIN_KEY && m.key && same(String(m.key), ADMIN_KEY));
@@ -288,8 +289,18 @@ app.get('/api/admin/user', (q, r) => {
   const n = String(q.query.name || ''), u0 = db.users[n]; if (!u0) return bad(r, 404, 'پیدا نشد');
   const live = Object.values(rooms).filter(x => x.by === n).map(x => ({ code: x.code, type: x.type, at: x.at || 0, count: names(x).length, members: names(x), msgs: (x.chat || []).length, media: liveUploads(x.uploads).length, live: true }));
   const arch = Object.values(db.archive).filter(a => a.by === n).sort((a, b) => b.closedAt - a.closedAt).map(a => ({ id: a.id, code: a.code, type: a.type, at: a.at, closedAt: a.closedAt, count: a.seen.length, msgs: a.chat.length, media: liveUploads(a.uploads).length }));
-  const chats = Object.values(db.chats).filter(c => c.owner === n).map(c => ({ code: c.code, title: c.title, type: c.type, members: Object.keys(c.members).length }));
-  r.json({ ...userRow(n, normU(u0)), live, arch, chats, chatsJoined: Object.values(db.chats).filter(c => c.members[n]).length });
+  const chats = Object.values(db.chats).filter(c => c.type !== 'dm' && c.owner === n).map(c => ({ code: c.code, title: c.title, type: c.type, members: Object.keys(c.members).length }));
+  const dms = Object.values(db.chats).filter(c => c.type === 'dm' && c.members[n]).map(c => ({ code: c.code, title: c.dm.join(' ↔ '), type: 'dm', members: 2 }));
+  r.json({ ...userRow(n, normU(u0)), live, arch, chats, dms, chatsJoined: Object.values(db.chats).filter(c => c.members[n]).length });
+});
+app.get('/api/admin/chats', (q, r) => {
+  if (!admin(q, r)) return;
+  r.json(Object.values(db.chats).sort((a, b) => (b.last || b.at) - (a.last || a.at)).slice(0, 300).map(c => ({ code: c.code, title: c.type === 'dm' ? c.dm.join(' ↔ ') : c.title, type: c.type, owner: c.owner, members: Object.keys(c.members).length, msgs: c.msgs.length, at: c.at, last: c.last || c.at, online: presentNames(c).length })));
+});
+app.get('/api/admin/chat', (q, r) => {
+  if (!admin(q, r)) return;
+  const c = db.chats[String(q.query.code || '')]; if (!c) return bad(r, 404, 'پیدا نشد');
+  r.json({ code: c.code, title: c.type === 'dm' ? c.dm.join(' ↔ ') : c.title, type: c.type, owner: c.owner, at: c.at, members: Object.keys(c.members), msgs: c.msgs.slice(-200) });
 });
 app.get('/api/admin/support', (q, r) => { if (admin(q, r)) r.json(db.support.slice(-50).reverse()); });
 
@@ -431,48 +442,87 @@ const chatPresent = {}, chatToks = {};
 let gSaveT = 0; const saveSoon = () => { if (!gSaveT) gSaveT = setTimeout(() => { gSaveT = 0; save(); }, 2000); };
 const gsend = (w, o) => { if (w.readyState === 1) w.send(JSON.stringify(o)); };
 const gbcast = (c, o) => (chatPresent[c.code] || []).forEach(w => gsend(w, o));
-const chatInfo = c => ({ code: c.code, title: c.title, type: c.type, count: Object.keys(c.members).length, online: (chatPresent[c.code] || new Set()).size });
-const chatMembers = c => { const here = new Set([...(chatPresent[c.code] || [])].map(w => w.gname)); return Object.keys(c.members).map(n => ({ n, on: here.has(n) })); };
-const chatAvs = c => { const o = {}; Object.entries(c.members).sort((a, b) => b[1].at - a[1].at).slice(0, 30).forEach(([n, v]) => { if (v.av) o[n] = v.av; }); return o; };
+const userAv = n => { const u = db.users[n]; return u && typeof u === 'object' ? (u.av || '') : ''; };
+const presentNames = c => [...(chatPresent[c.code] || [])].filter(w => !w.gghost).map(w => w.gname);
+const lastOf = c => { const m = c.msgs[c.msgs.length - 1]; return m ? { name: m.name, k: m.k, text: m.k === 't' ? String(m.text).slice(0, 40) : '', at: m.at } : null; };
+const chatInfo = (c, viewer) => {
+  const peer = c.type === 'dm' ? (c.dm.find(x => x !== viewer) || c.dm[0]) : '';
+  return { code: c.code, title: c.type === 'dm' ? peer : c.title, type: c.type, dm: c.dm || null, owner: c.owner, av: c.type === 'dm' ? userAv(peer) : (c.av || ''), count: Object.keys(c.members).length, online: presentNames(c).length, last: lastOf(c) };
+};
+const chatMembers = c => { const here = new Set(presentNames(c)); return Object.keys(c.members).map(n => ({ n, on: here.has(n) })); };
+const chatAvs = c => { const o = {}; Object.entries(c.members).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, 30).forEach(([n, v]) => { const av = userAv(n) || v.av; if (av) o[n] = av; }); return o; };
+function setUserProfile(n, bio, av) {
+  const u = touchUser(n); if (!u) return;
+  if (typeof bio === 'string') u.bio = bio.trim().slice(0, 150);
+  const a = validAv(av); if (a) u.av = a;
+  saveSoon();
+}
 function gDrop(ws) {
   (ws.chatCodes || []).forEach(k => { const st = chatPresent[k], c = db.chats[k]; if (st) { st.delete(ws); if (c) gbcast(c, { t: 'gmembers', code: k, members: chatMembers(c) }); } });
 }
 function pushChatOffline(c, msg) {
-  const here = new Set([...(chatPresent[c.code] || [])]), on = connectedEps(), body = msg.k === 's' ? 'استیکر' : msg.k === 'i' ? '🖼 تصویر / گیف' : String(msg.text).slice(0, 120);
-  wss.clients.forEach(w => { if (w.gname && w.gname !== msg.name && c.members[w.gname] && !here.has(w)) gsend(w, { t: 'gnotify', code: c.code, title: c.title, by: msg.name, text: body }); });
+  const here = new Set([...(chatPresent[c.code] || [])]), on = connectedEps(), dm = c.type === 'dm';
+  const body = msg.k === 's' ? 'استیکر' : msg.k === 'i' ? '🖼 تصویر / گیف' : String(msg.text).slice(0, 120);
+  wss.clients.forEach(w => { if (!w.gghost && w.gname && w.gname !== msg.name && c.members[w.gname] && !here.has(w)) gsend(w, { t: 'gnotify', code: c.code, title: dm ? 'پیام خصوصی' : c.title, by: msg.name, text: body }); });
   for (const [n, v] of Object.entries(c.members)) {
-    if (n === msg.name || !v.ep || on.has(v.ep) || !db.subs[v.ep] || Date.now() - (v.last || 0) < 5000) continue;
-    v.last = Date.now(); pushSub(v.ep, { title: `${msg.name} · ${c.title}`, body, tag: 'g-' + c.code, url: '/?chat=' + c.code });
+    const ep = v.ep || (db.users[n] && db.users[n].ep) || '';
+    if (n === msg.name || !ep || on.has(ep) || !db.subs[ep] || Date.now() - (v.last || 0) < 5000) continue;
+    v.last = Date.now(); pushSub(ep, { title: dm ? msg.name : `${msg.name} · ${c.title}`, body, tag: 'g-' + c.code, url: '/?chat=' + c.code });
   }
 }
 function handleG(ws, m) {
   if (m.t === 'glist') {
-    const pub = Object.values(db.chats).filter(c => c.type === 'public').sort((a, b) => chatInfo(b).online - chatInfo(a).online || b.at - a.at).slice(0, 30).map(chatInfo);
-    const mine = (Array.isArray(m.codes) ? m.codes.slice(0, 30) : []).map(k => db.chats[String(k)]).filter(Boolean).map(chatInfo);
+    const nm = String(m.name || ws.gname || '').trim().slice(0, 20);
+    const pub = Object.values(db.chats).filter(c => c.type === 'public').sort((a, b) => presentNames(b).length - presentNames(a).length || b.at - a.at).slice(0, 30).map(c => chatInfo(c, ''));
+    const mine = nm ? Object.values(db.chats).filter(c => c.members[nm]).sort((a, b) => ((b.last || b.at) - (a.last || a.at))).slice(0, 60).map(c => chatInfo(c, nm)) : [];
     return gsend(ws, { t: 'glist', pub, mine });
   }
+  if (m.t === 'gprofile') {
+    const n = String(m.name || '').trim().slice(0, 20), u0 = db.users[n]; if (!u0) return gsend(ws, { t: 'gprofile', name: n, missing: true });
+    const u = normU(u0); return gsend(ws, { t: 'gprofile', name: n, bio: u.bio || '', av: u.av || '', first: u.first, online: [...wss.clients].some(w => w.readyState === 1 && !w.gghost && w.gname === n) });
+  }
+  const isAdm = !!(m.ghost && ADMIN_KEY && m.key && same(String(m.key), ADMIN_KEY));
+  if (m.t === 'gjoin' && isAdm) { // مدیر: ورود نامرئی و فقط‌خواندنی به هر گپ (حتی خصوصی و پیوی)
+    const c = db.chats[String(m.code)]; if (!c) return gsend(ws, { t: 'gerror', msg: 'گپی با این کد پیدا نشد' });
+    ws.gghost = true; ws.gname = 'مدیر';
+    (chatPresent[c.code] = chatPresent[c.code] || new Set()).add(ws); (ws.chatCodes = ws.chatCodes || new Set()).add(c.code);
+    return gsend(ws, { t: 'gjoined', ...chatInfo(c, ''), title: c.type === 'dm' ? c.dm.join(' ↔ ') : c.title, readonly: true, members: chatMembers(c), avs: chatAvs(c), msgs: c.msgs.slice(-100), gtok: '' });
+  }
+  if (m.t === 'gleave' && ws.gghost) { const st = chatPresent[String(m.code)]; if (st) st.delete(ws); if (ws.chatCodes) ws.chatCodes.delete(String(m.code)); return; }
   const name = String(m.name || ws.gname || '').trim().slice(0, 20);
   if (!name) return gsend(ws, { t: 'gerror', msg: 'اول یک نام انتخاب کن' });
-  ws.gname = name; touchUser(name);
+  ws.gname = name; ws.gghost = false; touchUser(name);
+  if (m.av) setUserProfile(name, undefined, m.av);
   if (m.t === 'gcreate') {
     const title = String(m.title || '').trim().slice(0, 30);
     if (!title) return gsend(ws, { t: 'gerror', msg: 'اسم گپ را بنویس' });
-    if (Object.keys(db.chats).length >= 300) return gsend(ws, { t: 'gerror', msg: 'ظرفیت گپ‌ها پر است' });
-    if (Object.values(db.chats).filter(c => c.owner === name).length >= 5) return gsend(ws, { t: 'gerror', msg: 'حداکثر ۵ گپ می‌توانی بسازی' });
+    if (Object.values(db.chats).filter(c => c.type !== 'dm').length >= 300) return gsend(ws, { t: 'gerror', msg: 'ظرفیت گپ‌ها پر است' });
+    if (Object.values(db.chats).filter(c => c.type !== 'dm' && c.owner === name).length >= 5) return gsend(ws, { t: 'gerror', msg: 'حداکثر ۵ گپ می‌توانی بسازی' });
     let code; do { code = String(crypto.randomInt(10000, 100000)); } while (db.chats[code]);
-    db.chats[code] = { code, title, type: m.type === 'private' ? 'private' : 'public', owner: name, at: Date.now(), members: {}, msgs: [] };
+    db.chats[code] = { code, title, type: m.type === 'private' ? 'private' : 'public', owner: name, at: Date.now(), av: '', members: {}, msgs: [] };
     m = { ...m, t: 'gjoin', code, created: true };
+  }
+  if (m.t === 'gdm') { // پیوی بین دو نفر
+    const to = String(m.to || '').trim().slice(0, 20);
+    if (!to || to === name || !db.users[to]) return gsend(ws, { t: 'gerror', msg: 'این کاربر پیدا نشد' });
+    const code = 'd' + crypto.createHash('sha1').update([name, to].sort().join('|')).digest('hex').slice(0, 9);
+    if (!db.chats[code]) {
+      if (Object.values(db.chats).filter(c => c.type === 'dm' && c.owner === name).length >= 100) return gsend(ws, { t: 'gerror', msg: 'تعداد پیوی‌ها زیاد شده' });
+      db.chats[code] = { code, title: '', type: 'dm', dm: [name, to].sort(), owner: name, at: Date.now(), members: {}, msgs: [] };
+    }
+    const dc = db.chats[code]; if (!dc.members[to]) dc.members[to] = { ep: '', av: '', at: Date.now() };
+    m = { ...m, t: 'gjoin', code };
   }
   if (m.t === 'gjoin') {
     const c = db.chats[String(m.code)];
-    if (!c) return gsend(ws, { t: 'gerror', msg: 'گپی با این کد پیدا نشد' });
+    if (!c || (c.type === 'dm' && !c.dm.includes(name))) return gsend(ws, { t: 'gerror', msg: 'گپی با این کد پیدا نشد' });
     const old = c.members[name];
     if (!old && Object.keys(c.members).length >= 100) return gsend(ws, { t: 'gerror', msg: 'این گپ پر است' });
     const av = validAv(m.av) || (old && old.av) || '';
     c.members[name] = { ep: ws.ep || (old && old.ep) || '', av, at: Date.now(), last: old ? old.last : 0 };
     (chatPresent[c.code] = chatPresent[c.code] || new Set()).add(ws); (ws.chatCodes = ws.chatCodes || new Set()).add(c.code);
     const gtok = crypto.randomBytes(8).toString('hex'); chatToks[gtok] = c.code;
-    gsend(ws, { t: 'gjoined', code: c.code, title: c.title, type: c.type, owner: c.owner, created: !!m.created, members: chatMembers(c), avs: chatAvs(c), msgs: c.msgs.slice(-100), gtok });
+    gsend(ws, { t: 'gjoined', ...chatInfo(c, name), created: !!m.created, members: chatMembers(c), avs: chatAvs(c), msgs: c.msgs.slice(-100), gtok });
     gbcast(c, { t: 'gmembers', code: c.code, members: chatMembers(c) });
     if (av && !old) gbcast(c, { t: 'gav', code: c.code, name, av });
     return saveSoon();
@@ -485,6 +535,7 @@ function handleG(ws, m) {
     if (db.chats[c.code]) gbcast(c, { t: 'gmembers', code: c.code, members: chatMembers(c) });
     return saveSoon();
   }
+  if (m.t === 'gsetav') { if (c.type !== 'dm' && c.owner === name) { c.av = validAv(m.av) || ''; gbcast(c, { t: 'gmeta', code: c.code, av: c.av }); saveSoon(); } return; }
   if (m.t === 'gmsg') {
     if (!chatPresent[c.code] || !chatPresent[c.code].has(ws)) return;
     const now = Date.now(); if (now - (ws.gl || 0) < 300) return; ws.gl = now;
@@ -492,7 +543,9 @@ function handleG(ws, m) {
     if (m.k === 's' && /^[a-z0-9_]{1,24}$/.test(String(m.id))) { msg.k = 's'; msg.sid = String(m.id); }
     else if (m.k === 'i' && /^\/media\/[a-f0-9]{16}\.(gif|png|jpg|webp)$/.test(String(m.url)) && fs.existsSync('uploads/' + String(m.url).slice(7))) { msg.k = 'i'; msg.url = String(m.url); }
     else { const t = String(m.text || '').trim().slice(0, 500); if (!t) return; msg.text = t; }
-    c.msgs.push(msg); if (c.msgs.length > 200) c.msgs.shift();
+    const rid = Number(m.rid); const o = rid ? c.msgs.find(x => x.id === rid) : null;
+    if (o) msg.re = { id: o.id, name: o.name, k: o.k, text: o.k === 't' ? String(o.text).slice(0, 60) : '' };
+    c.msgs.push(msg); if (c.msgs.length > 200) c.msgs.shift(); c.last = now;
     gbcast(c, { t: 'gmsg', code: c.code, msg }); pushChatOffline(c, msg); saveSoon();
   }
 }
