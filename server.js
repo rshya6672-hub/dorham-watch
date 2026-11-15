@@ -531,7 +531,7 @@ function handleG(ws, m) {
   if (!c || !c.members[name]) return;
   if (m.t === 'gleave') {
     const st = chatPresent[c.code]; if (st) st.delete(ws); if (ws.chatCodes) ws.chatCodes.delete(c.code);
-    if (!m.stay) { delete c.members[name]; if (!Object.keys(c.members).length) delete db.chats[c.code]; }
+    if (!m.stay) { delete c.members[name]; } // گپ هرگز خودکار پاک نمی‌شود، حتی بدون عضو
     if (db.chats[c.code]) gbcast(c, { t: 'gmembers', code: c.code, members: chatMembers(c) });
     return saveSoon();
   }
